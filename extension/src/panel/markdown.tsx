@@ -270,6 +270,18 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
     );
   };
 
+  const onPreview = () => {
+    window.parent.postMessage(
+      {
+        type: "gh-claude-preview-finding",
+        file: finding.file,
+        line: finding.line,
+        side: finding.side ?? "RIGHT",
+      },
+      "*",
+    );
+  };
+
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(commentText);
@@ -292,11 +304,26 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
       </div>
       {finding.file && (
         <div className="md-finding-location">
-          <code>
-            {finding.file}
-            {finding.line ? `:${finding.line}` : ""}
-            {finding.side === "LEFT" ? " (removed line)" : ""}
-          </code>
+          {canInsert ? (
+            <button
+              type="button"
+              className="md-finding-location-btn"
+              onClick={onPreview}
+              title="Scroll to and highlight this line in the diff"
+            >
+              <code>
+                {finding.file}
+                {finding.line ? `:${finding.line}` : ""}
+                {finding.side === "LEFT" ? " (removed line)" : ""}
+              </code>
+            </button>
+          ) : (
+            <code>
+              {finding.file}
+              {finding.line ? `:${finding.line}` : ""}
+              {finding.side === "LEFT" ? " (removed line)" : ""}
+            </code>
+          )}
         </div>
       )}
       {finding.body && (
@@ -306,14 +333,24 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
       )}
       <div className="md-finding-actions">
         {canInsert && (
-          <button
-            type="button"
-            className="md-finding-btn md-finding-btn-primary"
-            onClick={onInsert}
-            title="Open GitHub's inline comment box on this line and stage as a review comment"
-          >
-            Insert on line {finding.line}
-          </button>
+          <>
+            <button
+              type="button"
+              className="md-finding-btn md-finding-btn-primary"
+              onClick={onInsert}
+              title="Open GitHub's inline comment box on this line and stage as a review comment"
+            >
+              Insert on line {finding.line}
+            </button>
+            <button
+              type="button"
+              className="md-finding-btn"
+              onClick={onPreview}
+              title="Scroll to and highlight this line in the diff"
+            >
+              Show in diff
+            </button>
+          </>
         )}
         <button
           type="button"

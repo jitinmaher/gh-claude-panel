@@ -31,6 +31,78 @@ export type InsertResult =
   | { ok: true }
   | { ok: false; reason: string };
 
+export interface PreviewRequest {
+  file: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+}
+
+export type PreviewResult =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+/**
+ * Scroll the matching diff row into view and flash a highlight on it.
+ * Read-only — does not click any buttons or open any forms.
+ */
+export async function previewFindingLocation(req: PreviewRequest): Promise<PreviewResult> {
+  if (!FILES_PATH_RE.test(location.pathname)) {
+    const navigated = await navigateToFilesTab();
+    if (!navigated) return { ok: false, reason: "could not open Files Changed tab" };
+  }
+
+  const fileContainer = await waitFor(() => findFileContainer(req.file), 4000);
+  if (!fileContainer) {
+    return { ok: false, reason: `file ${req.file} not in this PR's diff` };
+  }
+
+  const numCell = findLineNumCell(fileContainer, req.line, req.side);
+  if (!numCell) {
+    return {
+      ok: false,
+      reason: `line ${req.line} (${req.side}) not in the diff for ${req.file}`,
+    };
+  }
+
+  const row = numCell.closest("tr");
+  if (!row) return { ok: false, reason: "row not found" };
+
+  // Scroll the row into view, biased toward the top third so the user
+  // has some visual context above it.
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  flashHighlight(row);
+  return { ok: true };
+}
+
+/**
+ * Pulse a yellow highlight on a diff row. Implemented by injecting a
+ * one-off <style> tag and toggling a class — avoids needing to add CSS
+ * to the host page permanently.
+ */
+function flashHighlight(row: HTMLElement) {
+  const styleId = "gh-claude-flash-style";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      .gh-claude-flash > td {
+        animation: gh-claude-flash-anim 2.2s ease-out;
+      }
+      @keyframes gh-claude-flash-anim {
+        0%   { background-color: rgba(255, 213, 0, 0.55); }
+        60%  { background-color: rgba(255, 213, 0, 0.30); }
+        100% { background-color: transparent; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  row.classList.remove("gh-claude-flash"); // restart if already flashing
+  // Force reflow so the animation restarts on rapid re-clicks.
+  void (row as HTMLElement).offsetWidth;
+  row.classList.add("gh-claude-flash");
+  setTimeout(() => row.classList.remove("gh-claude-flash"), 2400);
+}
+
 const FILES_PATH_RE = /\/pull\/\d+\/files(\/.*)?$/;
 
 export async function insertFindingComment(req: InsertRequest): Promise<InsertResult> {

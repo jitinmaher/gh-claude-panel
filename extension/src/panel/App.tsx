@@ -192,6 +192,26 @@ const _availableBackendsIds = BACKENDS.map((b) => b.id);
 const SYSTEM_PROMPT = `You are an assistant helping a developer review a GitHub pull request.
 Reference specific files and line ranges from the diff when relevant.
 
+CRITICAL: each diff line in the context is prefixed with its line number
+in the post-image (the file AFTER this PR's changes), e.g.
+
+       @@ -10,7 +10,9 @@
+      10   const x = 1;
+      11 - const y = 2;
+      12 + const y = 3;
+      13 + const z = 4;
+      14   return x + y;
+
+Use those gutter numbers when filling the "line:" field of a finding.
+For added lines (+) use the post-image number shown. For deleted lines
+(-), use the same number and set "side: LEFT". For context lines (no
+prefix) use the post-image number with side: RIGHT.
+
+NEVER set line: 1 unless the issue is actually on line 1 of the file —
+"1" is not a fallback. If you can't identify a specific line, OMIT the
+file/line/side fields entirely and the card will render without an Insert
+button.
+
 When you identify a concrete issue, suggestion, or risk tied to a specific
 location in the diff, format it as a fenced block with a severity tag and
 metadata. The UI will render this as a colored card with a button that

@@ -69,7 +69,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Cross-frame bridge between panel iframe and GitHub page.
 import { extractPRContextWithDiffFetch } from "../github/pr-context";
-import { insertFindingComment } from "../github/review-insert";
+import { insertFindingComment, previewFindingLocation } from "../github/review-insert";
 
 function showToast(text: string) {
   const existing = document.getElementById("gh-claude-toast");
@@ -153,11 +153,34 @@ window.addEventListener("message", async (e) => {
     await handleInsertFinding(e.data);
     return;
   }
+  if (e.data?.type === "gh-claude-preview-finding") {
+    await handlePreviewFinding(e.data);
+    return;
+  }
   if (e.data?.type === "gh-claude-toast" && typeof e.data.text === "string") {
     showToast(e.data.text);
     return;
   }
 });
+
+async function handlePreviewFinding(req: {
+  file?: string;
+  line?: number;
+  side?: "LEFT" | "RIGHT";
+}) {
+  if (!req.file || !req.line) {
+    showToast("no file/line to preview");
+    return;
+  }
+  const result = await previewFindingLocation({
+    file: req.file,
+    line: req.line,
+    side: req.side ?? "RIGHT",
+  });
+  if (!result.ok) {
+    showToast(result.reason);
+  }
+}
 
 // Pre-mount the iframe (hidden) so opening is instant.
 ensurePanel();

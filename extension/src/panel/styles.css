@@ -510,6 +510,27 @@ body {
   color: var(--fg);
 }
 
+.md-finding-location-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  display: inline;
+}
+
+.md-finding-location-btn code {
+  transition: border-color 80ms ease, background 80ms ease;
+}
+
+.md-finding-location-btn:hover code {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
 .md-finding-actions {
   display: flex;
   gap: 6px;

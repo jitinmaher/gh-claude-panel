@@ -20,24 +20,60 @@ export function isPRPage(url: string = location.href): boolean {
 
 /**
  * Extract the diff text from one of GitHub's `.file` containers. Works
- * on both live document and parsed Document instances.
+ * on both the live document and a parsed Document.
+ *
+ * Each output line is prefixed with the post-image line number (the
+ * "RIGHT" side) so the model has a real coordinate to reference. Format:
+ *
+ *   @@ hunk header @@
+ *   42  context line
+ *   43- old line
+ *      + new line  (added lines get the line number too)
+ *
+ * For added lines we emit the right-side number; for deleted lines, the
+ * left-side. Context lines show the right-side. The 5-char zero-padded
+ * gutter keeps things scannable for the model and the human.
+ *
+ * GitHub's DOM stores numbers on adjacent <td class="blob-num"> cells:
+ *   - Unified view: two blob-num cells per row, first = LEFT, second = RIGHT
+ *   - Split view: same structure but the cells live in separate <tr>s
+ * The data-line-number attribute is the source of truth either way.
  */
 function collectDiffLines(fileEl: HTMLElement): string {
   const rows = fileEl.querySelectorAll<HTMLTableRowElement>(SELECTORS.fileDiffRows);
   if (rows.length === 0) return "";
-  const lines: string[] = [];
+  const out: string[] = [];
   rows.forEach((row) => {
     const cls = row.className;
-    let prefix = " ";
     if (cls.includes("blob-expanded") || cls.includes("js-expandable-line")) return;
+
+    // Hunk header rows (the "@@ -10,7 +10,9 @@ …" line) sit alone in a
+    // single <td colspan> and have no blob-code-addition/deletion class.
+    if (cls.includes("js-expandable-line") || cls.includes("hunk-header")) return;
+    const hunkCell = row.querySelector("td.blob-num-hunk, td.blob-code-hunk");
+    if (hunkCell) {
+      const text = (hunkCell.textContent ?? "").trim();
+      if (text) out.push(text);
+      return;
+    }
+
+    let prefix = " ";
     if (cls.includes("blob-code-deletion")) prefix = "-";
     else if (cls.includes("blob-code-addition")) prefix = "+";
+
+    const numCells = row.querySelectorAll<HTMLTableCellElement>("td.blob-num");
+    // First num cell = LEFT, second = RIGHT (unified view convention).
+    const leftN = numCells[0]?.getAttribute("data-line-number") ?? "";
+    const rightN = numCells[1]?.getAttribute("data-line-number") ?? leftN;
+    const lineNum = prefix === "-" ? leftN : rightN;
+    const gutter = lineNum ? lineNum.padStart(5, " ") : "     ";
+
     const codeCell = row.querySelector("td.blob-code, td.blob-code-inner");
     if (!codeCell) return;
     const text = (codeCell.textContent ?? "").replace(/\n+/g, "");
-    lines.push(prefix + text);
+    out.push(`${gutter} ${prefix}${text}`);
   });
-  return lines.join("\n");
+  return out.join("\n");
 }
 
 export function parsePRUrl(url: string = location.href):
