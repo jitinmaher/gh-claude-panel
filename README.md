@@ -1,3 +1,4 @@
+
 # gh-claude-panel
 
 > A Chrome side panel that lets Claude review your GitHub pull requests in place — no context switching, no copy-paste.
@@ -9,6 +10,8 @@ One click on the toolbar icon slides a chat panel out from the right edge of any
 - **Local Cursor** — your `cursor-agent` CLI.
 
 Works on **github.com** and **GitHub Enterprise** hosts.
+
+https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 
 ---
 
