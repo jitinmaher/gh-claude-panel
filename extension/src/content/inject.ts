@@ -68,9 +68,74 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 // Cross-frame bridge between panel iframe and GitHub page.
-// We must dynamically import the scraper because content scripts and the
-// iframe live in different JS realms.
 import { extractPRContextWithDiffFetch } from "../github/pr-context";
+import { insertFindingComment } from "../github/review-insert";
+
+function showToast(text: string) {
+  const existing = document.getElementById("gh-claude-toast");
+  if (existing) existing.remove();
+  const el = document.createElement("div");
+  el.id = "gh-claude-toast";
+  el.textContent = text;
+  Object.assign(el.style, {
+    position: "fixed",
+    bottom: "16px",
+    left: "calc(50% - 210px)", // center over the page area (panel is 420px wide)
+    transform: "translateX(-50%)",
+    background: "#1f2328",
+    color: "#ffffff",
+    padding: "8px 14px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: "500",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+    zIndex: "2147483647",
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+    pointerEvents: "none",
+    opacity: "0",
+    transition: "opacity 180ms ease",
+  } satisfies Partial<CSSStyleDeclaration>);
+  document.body.appendChild(el);
+  // Fade in, then out.
+  requestAnimationFrame(() => (el.style.opacity = "1"));
+  setTimeout(() => {
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 200);
+  }, 2400);
+}
+
+async function handleInsertFinding(req: {
+  file?: string;
+  line?: number;
+  side?: "LEFT" | "RIGHT";
+  text: string;
+}) {
+  if (!req.file || !req.line) {
+    await copyToClipboardFallback(req.text, "no file/line — copied to clipboard");
+    return;
+  }
+  const result = await insertFindingComment({
+    file: req.file,
+    line: req.line,
+    side: req.side ?? "RIGHT",
+    text: req.text,
+  });
+  if (result.ok) {
+    showToast(`Staged as draft review comment on ${req.file}:${req.line}`);
+  } else {
+    await copyToClipboardFallback(req.text, `${result.reason} — copied to clipboard`);
+  }
+}
+
+async function copyToClipboardFallback(text: string, message: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    /* clipboard might be blocked — toast still informs the user */
+  }
+  showToast(message);
+}
 
 window.addEventListener("message", async (e) => {
   const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
@@ -82,6 +147,15 @@ window.addEventListener("message", async (e) => {
   if (e.data?.type === "gh-claude-request-pr") {
     const context = await extractPRContextWithDiffFetch();
     frame.contentWindow?.postMessage({ type: "gh-claude-pr-context", context }, "*");
+    return;
+  }
+  if (e.data?.type === "gh-claude-insert-finding") {
+    await handleInsertFinding(e.data);
+    return;
+  }
+  if (e.data?.type === "gh-claude-toast" && typeof e.data.text === "string") {
+    showToast(e.data.text);
+    return;
   }
 });
 

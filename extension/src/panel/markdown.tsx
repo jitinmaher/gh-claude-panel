@@ -17,14 +17,75 @@ export function Markdown({ text }: { text: string }): JSX.Element {
 
 type Severity = "high" | "medium" | "low" | "info";
 
+export interface FindingMeta {
+  file?: string;
+  line?: number;
+  side?: "LEFT" | "RIGHT";
+  title: string;
+  /** The pre-rendered body text (markdown). */
+  body: string;
+  severity: Severity;
+}
+
 type Block =
   | { kind: "code"; lang: string; body: string }
-  | { kind: "finding"; severity: Severity; body: string }
+  | { kind: "finding"; finding: FindingMeta }
   | { kind: "heading"; level: number; body: string }
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
   | { kind: "p"; body: string }
   | { kind: "blank" };
+
+/**
+ * Pulls leading `key: value` lines off a finding block's body. Returns
+ * the metadata and the remaining body. Stops at the first non-key line
+ * or blank line.
+ */
+function parseFindingMeta(raw: string, severity: Severity): FindingMeta {
+  const lines = raw.split("\n");
+  let title: string | undefined;
+  let file: string | undefined;
+  let line: number | undefined;
+  let side: "LEFT" | "RIGHT" | undefined;
+  let i = 0;
+
+  // Consume leading "key: value" lines. Stop at the first non-key line.
+  while (i < lines.length) {
+    const m = lines[i].match(/^(file|line|side|title)\s*:\s*(.+)$/i);
+    if (!m) break;
+    const key = m[1].toLowerCase();
+    const value = m[2].trim();
+    if (key === "file") file = value;
+    else if (key === "line") {
+      const n = parseInt(value, 10);
+      if (Number.isFinite(n)) line = n;
+    } else if (key === "side") {
+      const s = value.toUpperCase();
+      if (s === "LEFT" || s === "RIGHT") side = s;
+    } else if (key === "title") title = value;
+    i++;
+  }
+  // Skip a blank separator line if present.
+  if (i < lines.length && lines[i].trim() === "") i++;
+
+  let body = lines.slice(i).join("\n").trim();
+
+  // If no explicit title field, treat the first remaining line as the title.
+  if (!title) {
+    const split = body.split("\n");
+    title = split[0] ?? "Finding";
+    body = split.slice(1).join("\n").trim();
+  }
+
+  return {
+    severity,
+    file,
+    line,
+    side: side ?? (file && line ? "RIGHT" : undefined),
+    title,
+    body,
+  };
+}
 
 const SEVERITY_ALIASES: Record<string, Severity> = {
   high: "high",
@@ -64,7 +125,8 @@ function parseBlocks(text: string): Block[] {
       if (findingMatch) {
         const key = (findingMatch[1] ?? "info").toLowerCase();
         const severity = SEVERITY_ALIASES[key] ?? "info";
-        out.push({ kind: "finding", severity, body: body.join("\n") });
+        const finding = parseFindingMeta(body.join("\n"), severity);
+        out.push({ kind: "finding", finding });
       } else {
         out.push({ kind: "code", lang, body: body.join("\n") });
       }
@@ -135,30 +197,8 @@ function renderBlock(b: Block, key: number): ReactNode {
           <code>{b.body}</code>
         </pre>
       );
-    case "finding": {
-      const labels: Record<Severity, string> = {
-        high: "High",
-        medium: "Medium",
-        low: "Low",
-        info: "Info",
-      };
-      // First line of body may be a "Title — rest" header; treat first
-      // line specially so it renders as the card's heading.
-      const lines = b.body.split("\n");
-      const heading = lines[0] ?? "";
-      const rest = lines.slice(1).join("\n").trim();
-      return (
-        <div key={key} className={`md-finding md-finding-${b.severity}`}>
-          <div className="md-finding-head">
-            <span className={`md-finding-badge md-finding-badge-${b.severity}`}>
-              {labels[b.severity]}
-            </span>
-            <span className="md-finding-title">{inline(heading)}</span>
-          </div>
-          {rest && <div className="md-finding-body">{parseBlocks(rest).map(renderBlock)}</div>}
-        </div>
-      );
-    }
+    case "finding":
+      return <FindingCard key={key} finding={b.finding} />;
     case "heading": {
       const sizes = ["", "md-h1", "md-h2", "md-h3", "md-h4", "md-h5", "md-h6"];
       const className = sizes[b.level] ?? "md-h6";
@@ -194,6 +234,98 @@ function renderBlock(b: Block, key: number): ReactNode {
     case "blank":
       return null;
   }
+}
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  info: "Info",
+};
+
+function FindingCard({ finding }: { finding: FindingMeta }) {
+  const canInsert = Boolean(finding.file && finding.line);
+  // The text we paste into GitHub's review comment box. Plain-text-ish
+  // markdown — GitHub renders markdown in review comments. Prepend the
+  // severity tag so the comment reader knows the level.
+  const commentText = [
+    `**[${SEVERITY_LABELS[finding.severity]}] ${finding.title}**`,
+    finding.body,
+    "",
+    "_Drafted via gh-claude-panel._",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const onInsert = () => {
+    window.parent.postMessage(
+      {
+        type: "gh-claude-insert-finding",
+        file: finding.file,
+        line: finding.line,
+        side: finding.side ?? "RIGHT",
+        text: commentText,
+      },
+      "*",
+    );
+  };
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(commentText);
+      window.parent.postMessage(
+        { type: "gh-claude-toast", text: "Copied to clipboard" },
+        "*",
+      );
+    } catch {
+      /* clipboard write blocked — ignore */
+    }
+  };
+
+  return (
+    <div className={`md-finding md-finding-${finding.severity}`}>
+      <div className="md-finding-head">
+        <span className={`md-finding-badge md-finding-badge-${finding.severity}`}>
+          {SEVERITY_LABELS[finding.severity]}
+        </span>
+        <span className="md-finding-title">{inline(finding.title)}</span>
+      </div>
+      {finding.file && (
+        <div className="md-finding-location">
+          <code>
+            {finding.file}
+            {finding.line ? `:${finding.line}` : ""}
+            {finding.side === "LEFT" ? " (removed line)" : ""}
+          </code>
+        </div>
+      )}
+      {finding.body && (
+        <div className="md-finding-body">
+          {parseBlocks(finding.body).map((blk, i) => renderBlock(blk, i))}
+        </div>
+      )}
+      <div className="md-finding-actions">
+        {canInsert && (
+          <button
+            type="button"
+            className="md-finding-btn md-finding-btn-primary"
+            onClick={onInsert}
+            title="Open GitHub's inline comment box on this line and stage as a review comment"
+          >
+            Insert on line {finding.line}
+          </button>
+        )}
+        <button
+          type="button"
+          className="md-finding-btn"
+          onClick={onCopy}
+          title="Copy the comment text"
+        >
+          Copy
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** Inline tokens: `code`, **bold**, *italic*. Returned as a ReactNode array. */

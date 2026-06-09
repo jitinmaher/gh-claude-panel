@@ -493,6 +493,87 @@ body {
   overflow-wrap: anywhere;
 }
 
+.md-finding-location {
+  margin-top: 2px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+
+.md-finding-location code {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  background: var(--code-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-muted);
+  color: var(--fg);
+}
+
+.md-finding-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.md-finding-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: inherit;
+  padding: 3px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 80ms ease, border-color 80ms ease;
+}
+
+.md-finding-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--fg-muted);
+}
+
+.md-finding-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.md-finding-btn-primary:hover {
+  background: var(--accent-emphasis);
+  border-color: var(--accent-emphasis);
+  color: var(--accent-fg);
+}
+
+/* ───────── Toast ───────── */
+
+.gh-claude-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 2147483647;
+  animation: toast-in 200ms ease-out, toast-out 200ms ease-in 2.4s forwards;
+  pointer-events: none;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translate(-50%, 8px); }
+}
+
 .md-finding-badge {
   font-size: 10px;
   font-weight: 600;
