@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Small-size variant of the extension mark (used for 16 / 32 px).
+  At 16px the three-line diff in icon.svg collapses into a blur, so this
+  version keeps just one prominent diff line and a chunkier bubble.
+
+  Same palette as icon.svg.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GH Claude Panel">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0969DA"/>
+      <stop offset="1" stop-color="#0550AE"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#bg)"/>
+
+  <!-- Bubble: bigger relative to canvas, thicker tail. -->
+  <path
+    d="M 22 28
+       L 106 28
+       Q 114 28 114 36
+       L 114 80
+       Q 114 88 106 88
+       L 56 88
+       L 36 108
+       L 40 88
+       L 22 88
+       Q 14 88 14 80
+       L 14 36
+       Q 14 28 22 28 Z"
+    fill="#F6F8FA"
+  />
+
+  <!-- Two big diff lines: + (green) above − (red). -->
+  <rect x="26" y="44" width="18" height="10" rx="3" fill="#1A7F37"/>
+  <rect x="50" y="44" width="56" height="10" rx="3" fill="#DAFBE1"/>
+
+  <rect x="26" y="62" width="18" height="10" rx="3" fill="#CF222E"/>
+  <rect x="50" y="62" width="48" height="10" rx="3" fill="#FFEBE9"/>
+</svg>

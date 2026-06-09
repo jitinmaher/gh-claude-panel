@@ -1,0 +1,24 @@
+{
+  "name": "gh-claude-panel-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gh-claude-bridge": "./dist/bin/gh-claude-bridge.js"
+  },
+  "scripts": {
+    "dev": "tsx watch bin/gh-claude-bridge.ts",
+    "start": "tsx bin/gh-claude-bridge.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

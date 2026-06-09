@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  GH Claude Panel — extension mark.
+
+  Concept: a chat speech bubble containing diff lines (+ / −), conveying
+  "AI assistant reading and commenting on code changes." Designed to read
+  cleanly at 16×16 (toolbar) and scale to 128×128 (store card).
+
+  Palette borrowed loosely from GitHub Primer:
+    accent       #0969DA  (GitHub's blue)
+    accent-dark  #0550AE
+    added        #1A7F37  (GitHub's green for "+")
+    removed      #CF222E  (GitHub's red for "−")
+    chrome       #F6F8FA  (subtle background)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GH Claude Panel">
+  <!-- Rounded square backdrop. Slight gradient gives the toolbar icon
+       some depth without crowding the silhouette at 16px. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0969DA"/>
+      <stop offset="1" stop-color="#0550AE"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)"/>
+
+  <!-- Speech bubble. Tail bottom-left. Padding tuned so diff lines breathe
+       at small sizes. -->
+  <path
+    d="M 28 30
+       L 100 30
+       Q 108 30 108 38
+       L 108 78
+       Q 108 86 100 86
+       L 52 86
+       L 38 100
+       L 40 86
+       L 28 86
+       Q 20 86 20 78
+       L 20 38
+       Q 20 30 28 30 Z"
+    fill="#F6F8FA"
+  />
+
+  <!-- Diff lines inside the bubble:
+       "+" line (green), "−" line (red), context line (neutral).
+       Drawn as rounded rects with a leading glyph rect for the sign. -->
+
+  <!-- + line -->
+  <rect x="30" y="42" width="10" height="6" rx="2" fill="#1A7F37"/>
+  <rect x="44" y="42" width="50" height="6" rx="2" fill="#DAFBE1"/>
+
+  <!-- context line -->
+  <rect x="30" y="54" width="10" height="6" rx="2" fill="#D1D9E0"/>
+  <rect x="44" y="54" width="40" height="6" rx="2" fill="#EAEEF2"/>
+
+  <!-- − line -->
+  <rect x="30" y="66" width="10" height="6" rx="2" fill="#CF222E"/>
+  <rect x="44" y="66" width="46" height="6" rx="2" fill="#FFEBE9"/>
+</svg>

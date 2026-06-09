@@ -1,0 +1,712 @@
+/*
+ * Panel styling.
+ *
+ * Strategy: inherit GitHub's typography and theme via useHostTheme.ts
+ * (which sets --host-font-family on :root and data-host-theme on <html>).
+ * Hardcoded values here are *fallbacks* for the rare case where parent
+ * access is blocked.
+ *
+ * Color tokens loosely follow Primer (GitHub's design system) but are
+ * intentionally local — we don't pull in @primer/css to keep the bundle
+ * small.
+ */
+
+:root {
+  /* Filled in at runtime from parent <body>'s computed style. */
+  --host-font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --host-font-size: 14px;
+  --mono-font:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  /* Light theme (Primer "light") */
+  --bg: #ffffff;
+  --bg-subtle: #f6f8fa;
+  --bg-muted: #eaeef2;
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --fg-subtle: #818b98;
+  --border: #d1d9e0;
+  --border-muted: #d1d9e0b3;
+  --accent: #0969da;
+  --accent-emphasis: #0550ae;
+  --accent-fg: #ffffff;
+  --accent-subtle: #ddf4ff;
+  --user-bg: #ddf4ff;
+  --user-border: #54aeff66;
+  --assistant-bg: #ffffff;
+  --assistant-border: #d1d9e0;
+  --code-bg: #f6f8fa;
+  --code-fg: #1f2328;
+  --pre-bg: #f6f8fa;
+  --danger-bg: #ffebe9;
+  --danger-fg: #d1242f;
+  --danger-border: #ff818266;
+
+  font-family: var(--host-font-family);
+  font-size: var(--host-font-size);
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-host-theme="dark"] {
+  --bg: #0d1117;
+  --bg-subtle: #151b23;
+  --bg-muted: #212830;
+  --fg: #f0f6fc;
+  --fg-muted: #9198a1;
+  --fg-subtle: #6a737d;
+  --border: #3d444d;
+  --border-muted: #3d444db3;
+  --accent: #4493f8;
+  --accent-emphasis: #1f6feb;
+  --accent-fg: #ffffff;
+  --accent-subtle: #121d2f;
+  --user-bg: #121d2f;
+  --user-border: #4493f866;
+  --assistant-bg: #0d1117;
+  --assistant-border: #3d444d;
+  --code-bg: #151b23;
+  --code-fg: #f0f6fc;
+  --pre-bg: #151b23;
+  --danger-bg: #2d1416;
+  --danger-fg: #ff7b72;
+  --danger-border: #ff818266;
+  color-scheme: dark;
+}
+
+/* OS-level dark fallback if useHostTheme couldn't read GitHub's setting. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-host-theme="light"]) {
+    --bg: #0d1117;
+    --bg-subtle: #151b23;
+    --bg-muted: #212830;
+    --fg: #f0f6fc;
+    --fg-muted: #9198a1;
+    --fg-subtle: #6a737d;
+    --border: #3d444d;
+    --border-muted: #3d444db3;
+    --accent: #4493f8;
+    --accent-emphasis: #1f6feb;
+    --accent-fg: #ffffff;
+    --accent-subtle: #121d2f;
+    --user-bg: #121d2f;
+    --user-border: #4493f866;
+    --assistant-bg: #0d1117;
+    --assistant-border: #3d444d;
+    --code-bg: #151b23;
+    --code-fg: #f0f6fc;
+    --pre-bg: #151b23;
+    --danger-bg: #2d1416;
+    --danger-fg: #ff7b72;
+    --danger-border: #ff818266;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  width: 100%;
+}
+
+body {
+  background: var(--bg);
+}
+
+/* ───────── Layout ───────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  font-size: 14px;
+}
+
+/* ───────── Header ───────── */
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  min-height: 44px;
+}
+
+.panel-header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+
+.backend-picker {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 24px 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 16 16'><path fill='%2359636e' d='M3.22 5.22a.75.75 0 011.06 0L8 8.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L3.22 6.28a.75.75 0 010-1.06z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.backend-picker:hover {
+  border-color: var(--fg-muted);
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1;
+  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+}
+
+.icon-btn:hover {
+  background: var(--bg-muted);
+  color: var(--fg);
+}
+
+/* ───────── Context chips ───────── */
+
+.context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.chip {
+  font-size: 11px;
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  padding: 2px 8px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.chip.chip-primary {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: var(--fg);
+}
+
+/* ───────── Chat stream ───────── */
+
+.chat-stream {
+  flex: 1;
+  /* overflow-y for vertical scroll; overflow-x:hidden ensures nothing
+     can push a horizontal scroll on the whole panel. Long code blocks
+     handle their own horizontal scroll via overflow-x:auto on .md-pre. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.chat-stream > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message {
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-size: 13.5px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  /* Critical: lets the flex child shrink below its content's intrinsic
+     width, so long unbroken tokens (URLs, code) don't push the panel
+     wider than the iframe. Combined with overflow-x:auto on .md-pre, this
+     keeps long code lines scrollable inside the card. */
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.message.user {
+  background: var(--user-bg);
+  border: 1px solid var(--user-border);
+  align-self: flex-end;
+  max-width: 92%;
+}
+
+.message.assistant {
+  background: var(--assistant-bg);
+  border: 1px solid var(--assistant-border);
+  align-self: stretch;
+  max-width: 100%;
+}
+
+.message.error {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-border);
+}
+
+.message-role {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.role-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.role-streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 10px;
+}
+
+.thinking-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: thinking-bounce 1s infinite ease-in-out;
+}
+
+.thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.35; }
+  40%           { transform: scale(1);   opacity: 1; }
+}
+
+.thinking-shimmer {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    var(--fg-subtle) 0%,
+    var(--fg) 25%,
+    var(--fg-subtle) 50%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+  font-style: italic;
+  font-size: 13px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Subtle "pulse" border on the streaming assistant card. */
+.message.assistant.streaming {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  animation: streaming-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 15%, transparent); }
+  50%      { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot,
+  .thinking-shimmer,
+  .message.assistant.streaming { animation: none; }
+}
+
+.muted {
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+
+.message-body {
+  white-space: pre-wrap;
+}
+
+/* When the message is rendered markdown, drop the pre-wrap on the
+   container — block elements handle their own whitespace. */
+.message.assistant .message-body {
+  white-space: normal;
+}
+
+/* ───────── Markdown ───────── */
+
+.md-p {
+  margin: 0 0 8px;
+}
+
+.md-p:last-child {
+  margin-bottom: 0;
+}
+
+.md-h1,
+.md-h2,
+.md-h3,
+.md-h4 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.md-h1 { font-size: 16px; }
+.md-h2 { font-size: 15px; }
+.md-h3 { font-size: 14px; }
+.md-h4 { font-size: 13px; color: var(--fg-muted); }
+
+.md-ul,
+.md-ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.md-ul li,
+.md-ol li {
+  margin-bottom: 2px;
+}
+
+.md-code {
+  font-family: var(--mono-font);
+  font-size: 0.92em;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-muted);
+}
+
+.md-pre {
+  font-family: var(--mono-font);
+  font-size: 12px;
+  background: var(--pre-bg);
+  color: var(--code-fg);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-muted);
+  overflow-x: auto;
+  margin: 8px 0;
+  line-height: 1.45;
+  /* Don't let a wide <pre> push its parent flex container wider than
+     the panel. The pre itself scrolls horizontally for overflow. */
+  max-width: 100%;
+  min-width: 0;
+  white-space: pre;
+}
+
+.md-pre code {
+  /* Already styled below; explicit white-space ensures the inherited
+     pre-wrap from .message-body doesn't break long code lines. */
+  white-space: pre;
+}
+
+.md-pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ───────── Severity findings ───────── */
+
+.md-finding {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border: 1px solid;
+  border-left-width: 4px;
+  /* Match .message: shrink below intrinsic content width so titles with
+     inline code don't push past the iframe edge. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.md-finding-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  min-width: 0;
+}
+
+.md-finding-title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.md-finding-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.md-finding-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.md-finding-body {
+  font-size: 12.5px;
+  color: var(--fg);
+  margin-top: 4px;
+}
+
+.md-finding-body .md-p:last-child { margin-bottom: 0; }
+.md-finding-body .md-pre { margin: 6px 0; font-size: 11.5px; }
+
+/* High — red */
+.md-finding-high {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  border-left-color: var(--danger-fg);
+}
+.md-finding-badge-high { background: var(--danger-fg); }
+
+/* Medium — yellow / amber */
+.md-finding-medium {
+  background: #fff8c5;
+  border-color: #d4a72c66;
+  border-left-color: #9a6700;
+}
+.md-finding-badge-medium { background: #9a6700; }
+
+/* Low — green */
+.md-finding-low {
+  background: #dafbe1;
+  border-color: #1a7f3766;
+  border-left-color: #1a7f37;
+}
+.md-finding-badge-low { background: #1a7f37; }
+
+/* Info — neutral blue */
+.md-finding-info {
+  background: var(--accent-subtle);
+  border-color: var(--user-border);
+  border-left-color: var(--accent);
+}
+.md-finding-badge-info { background: var(--accent); }
+
+:root[data-host-theme="dark"] .md-finding-medium {
+  background: #2d2200;
+  border-color: #9a670066;
+  border-left-color: #d4a72c;
+}
+:root[data-host-theme="dark"] .md-finding-badge-medium { background: #d4a72c; color: #0d1117; }
+
+:root[data-host-theme="dark"] .md-finding-low {
+  background: #04260f;
+  border-color: #1a7f3766;
+  border-left-color: #3fb950;
+}
+:root[data-host-theme="dark"] .md-finding-badge-low { background: #3fb950; color: #0d1117; }
+
+/* ───────── Composer ───────── */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+}
+
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  max-height: 200px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--fg);
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+.composer textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.composer-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.composer-row .spacer {
+  flex: 1;
+}
+
+.btn {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid transparent;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.btn:hover {
+  background: var(--accent-emphasis);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: var(--accent);
+}
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-muted);
+  border-color: var(--fg-muted);
+}
+
+/* ───────── Empty state ───────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  flex: 1;
+  text-align: left;
+  color: var(--fg-muted);
+  padding: 24px 16px;
+  gap: 14px;
+}
+
+.empty-state-heading {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+  text-align: center;
+}
+
+.empty-state-sub {
+  font-size: 11.5px;
+  color: var(--fg-subtle);
+  text-align: center;
+}
+
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.quick-actions button {
+  text-align: left;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: inherit;
+  line-height: 1.4;
+  transition: border-color 80ms ease, background 80ms ease;
+}
+
+.quick-actions button:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* ───────── Scrollbar ───────── */
+
+.chat-stream::-webkit-scrollbar {
+  width: 10px;
+}
+.chat-stream::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-stream::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+  border: 3px solid var(--bg);
+}
+.chat-stream::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-subtle);
+}

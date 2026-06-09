@@ -1,0 +1,16 @@
+{
+  "name": "gh-claude-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub side-panel Chrome extension for Claude and local agents",
+  "workspaces": [
+    "extension",
+    "bridge"
+  ],
+  "scripts": {
+    "dev:ext": "npm --workspace extension run dev",
+    "build:ext": "npm --workspace extension run build",
+    "dev:bridge": "npm --workspace bridge run dev",
+    "build:bridge": "npm --workspace bridge run build"
+  }
+}
