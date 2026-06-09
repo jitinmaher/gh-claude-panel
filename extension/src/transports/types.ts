@@ -51,7 +51,7 @@ export interface TransportSettings {
 export const DEFAULT_SETTINGS: Required<
   Pick<TransportSettings, "anthropicModel" | "bridgeUrl" | "defaultBackend">
 > = {
-  anthropicModel: "claude-sonnet-4-5",
+  anthropicModel: "claude-sonnet-4-6",
   bridgeUrl: "ws://127.0.0.1:7321",
   defaultBackend: "anthropic-cloud",
 };

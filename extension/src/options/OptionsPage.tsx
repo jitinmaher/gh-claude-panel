@@ -7,6 +7,46 @@ import {
   saveSettings,
 } from "../transports";
 
+/**
+ * Catalog of Claude model IDs to expose in the picker. Grouped by family;
+ * within each family newest first. Sourced from the claude-api skill on
+ * 2026-06-09. If Anthropic ships a new model, add it here.
+ *
+ * The "Custom…" option lets users enter an ID we don't ship in the
+ * dropdown (older snapshots, retired aliases, GHE proxies, etc.) without
+ * waiting for us to update this list.
+ */
+const MODEL_CATALOG: { group: string; models: { id: string; label: string }[] }[] = [
+  {
+    group: "Opus (most capable)",
+    models: [
+      { id: "claude-opus-4-8", label: "Claude Opus 4.8 (latest)" },
+      { id: "claude-opus-4-7", label: "Claude Opus 4.7" },
+      { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
+      { id: "claude-opus-4-5", label: "Claude Opus 4.5" },
+      { id: "claude-opus-4-1", label: "Claude Opus 4.1" },
+    ],
+  },
+  {
+    group: "Sonnet (balanced)",
+    models: [
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (latest)" },
+      { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    ],
+  },
+  {
+    group: "Haiku (fastest)",
+    models: [{ id: "claude-haiku-4-5", label: "Claude Haiku 4.5 (latest)" }],
+  },
+];
+
+const CUSTOM_MODEL_SENTINEL = "__custom__";
+
+function isCatalogModel(id: string | undefined): boolean {
+  if (!id) return true; // empty = will fall back to default; treat as catalog
+  return MODEL_CATALOG.some((g) => g.models.some((m) => m.id === id));
+}
+
 export function OptionsPage() {
   const [s, setS] = useState<TransportSettings | null>(null);
   const [saved, setSaved] = useState(false);
@@ -55,13 +95,52 @@ export function OptionsPage() {
 
         <div className="field">
           <label htmlFor="model">Model</label>
-          <input
+          <select
             id="model"
-            type="text"
-            placeholder="claude-sonnet-4-5"
-            value={s.anthropicModel ?? ""}
-            onChange={(e) => update("anthropicModel", e.target.value)}
-          />
+            value={
+              isCatalogModel(s.anthropicModel)
+                ? s.anthropicModel ?? "claude-sonnet-4-6"
+                : CUSTOM_MODEL_SENTINEL
+            }
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === CUSTOM_MODEL_SENTINEL) {
+                // Switch into custom mode — clear so the text input doesn't
+                // pre-fill with the previously-selected catalog ID, which
+                // would be misleading.
+                update("anthropicModel", "");
+              } else {
+                update("anthropicModel", v);
+              }
+            }}
+          >
+            {MODEL_CATALOG.map((group) => (
+              <optgroup key={group.group} label={group.group}>
+                {group.models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+            <option value={CUSTOM_MODEL_SENTINEL}>Custom…</option>
+          </select>
+          {!isCatalogModel(s.anthropicModel) && (
+            <input
+              id="model-custom"
+              type="text"
+              placeholder="e.g. claude-opus-4-1-20250805"
+              value={s.anthropicModel ?? ""}
+              onChange={(e) => update("anthropicModel", e.target.value)}
+              style={{ marginTop: 6 }}
+              aria-label="Custom model ID"
+            />
+          )}
+          <div className="hint">
+            Newer = more capable. Sonnet 4.6 is a good default for PR review.
+            Pick "Custom…" to enter an ID not in the list (older snapshots,
+            retired aliases, or proxy-rewritten IDs).
+          </div>
         </div>
       </section>
 
