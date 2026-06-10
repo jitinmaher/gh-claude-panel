@@ -322,32 +322,50 @@ function parseUnifiedDiffWithLineNumbers(text: string): { path: string; diff: st
 
     let leftLine = 0;
     let rightLine = 0;
+    let inHunk = false;
     const out_lines: string[] = [];
 
-    for (const raw of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
       const hunk = raw.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
       if (hunk) {
         leftLine = parseInt(hunk[1], 10);
         rightLine = parseInt(hunk[2], 10);
+        inHunk = true;
         out_lines.push(raw);
         continue;
       }
       // Skip headers we don't want to render line-numbered: file mode,
-      // ---/+++ markers, index hashes, "Binary files differ", etc.
+      // ---/+++ markers, index hashes, "Binary files differ", etc. These
+      // only appear before the first hunk, so guard on !inHunk to avoid
+      // misclassifying a code line that happens to start with one of
+      // these tokens.
       if (
-        raw.startsWith("index ") ||
-        raw.startsWith("--- ") ||
-        raw.startsWith("+++ ") ||
-        raw.startsWith("new file mode") ||
-        raw.startsWith("deleted file mode") ||
-        raw.startsWith("similarity index") ||
-        raw.startsWith("rename from") ||
-        raw.startsWith("rename to") ||
-        raw.startsWith("Binary files") ||
-        raw.startsWith("\\ No newline")
+        !inHunk &&
+        (raw.startsWith("index ") ||
+          raw.startsWith("--- ") ||
+          raw.startsWith("+++ ") ||
+          raw.startsWith("new file mode") ||
+          raw.startsWith("deleted file mode") ||
+          raw.startsWith("similarity index") ||
+          raw.startsWith("rename from") ||
+          raw.startsWith("rename to") ||
+          raw.startsWith("old mode") ||
+          raw.startsWith("Binary files"))
       ) {
         continue;
       }
+      // "\ No newline at end of file" is metadata, not a content line —
+      // never advances the counters.
+      if (raw.startsWith("\\ No newline")) {
+        continue;
+      }
+      if (!inHunk) {
+        // Pre-hunk noise we didn't explicitly match (e.g. the extended
+        // header on rename/copy). Drop without counting.
+        continue;
+      }
+
       if (raw.startsWith("+")) {
         out_lines.push(`${String(rightLine).padStart(5, " ")} +${raw.slice(1)}`);
         rightLine++;
@@ -358,8 +376,25 @@ function parseUnifiedDiffWithLineNumbers(text: string): { path: string; diff: st
         out_lines.push(`${String(rightLine).padStart(5, " ")}  ${raw.slice(1)}`);
         leftLine++;
         rightLine++;
+      } else if (raw === "") {
+        // A blank CONTEXT line. In a well-formed unified diff this is
+        // " " (space + empty), but trailing-whitespace stripping during
+        // transport turns it into "". It is still an unchanged line and
+        // MUST advance both counters — dropping it silently desyncs every
+        // subsequent line number, which sends inserted comments to the
+        // wrong row.
+        //
+        // Exception: the final element from text.split("\n") is the empty
+        // string after the diff's trailing newline — not a real line.
+        const isTrailingArtifact = i === lines.length - 1;
+        if (!isTrailingArtifact) {
+          out_lines.push(`${String(rightLine).padStart(5, " ")}  `);
+          leftLine++;
+          rightLine++;
+        }
       }
-      // else: blank or unknown line — drop
+      // else: a line we don't recognize inside a hunk — drop without
+      // counting (shouldn't happen for valid diffs).
     }
     out.push({ path, diff: out_lines.join("\n") });
   }
