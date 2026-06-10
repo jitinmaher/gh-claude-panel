@@ -1,42 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Small-size variant of the extension mark (used for 16 / 32 px).
-  At 16px the three-line diff in icon.svg collapses into a blur, so this
-  version keeps just one prominent diff line and a chunkier bubble.
+  Small-size variant of the Pat Before I Merge mark (used for 16 / 32 px).
 
-  Same palette as icon.svg.
+  At toolbar sizes the speech bubble + antenna + eyes in icon.svg all
+  blur into noise. This version drops the bubble entirely and shows
+  the robot head taking the full canvas. The yellow antenna tip still
+  reads at 16px as a single bright pixel — preserves the brand cue.
+
+  Same palette as icon.svg: black ink on mute-grey backdrop, yellow
+  antenna tip.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GH Claude Panel">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0969DA"/>
-      <stop offset="1" stop-color="#0550AE"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pat Before I Merge">
+  <!--
+    Mute-grey backdrop. Slightly tinted to differentiate the icon from
+    other white icons in the Chrome toolbar at 16px.
+  -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#facc15"/>
 
-  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#bg)"/>
-
-  <!-- Bubble: bigger relative to canvas, thicker tail. -->
-  <path
-    d="M 22 28
-       L 106 28
-       Q 114 28 114 36
-       L 114 80
-       Q 114 88 106 88
-       L 56 88
-       L 36 108
-       L 40 88
-       L 22 88
-       Q 14 88 14 80
-       L 14 36
-       Q 14 28 22 28 Z"
-    fill="#F6F8FA"
-  />
-
-  <!-- Two big diff lines: + (green) above − (red). -->
-  <rect x="26" y="44" width="18" height="10" rx="3" fill="#1A7F37"/>
-  <rect x="50" y="44" width="56" height="10" rx="3" fill="#DAFBE1"/>
-
-  <rect x="26" y="62" width="18" height="10" rx="3" fill="#CF222E"/>
-  <rect x="50" y="62" width="48" height="10" rx="3" fill="#FFEBE9"/>
+  <!--
+    Robot head — same geometry as the patyourai icon (36×36 viewBox),
+    scaled 3.3× to fill the 128×128 canvas. Translated so the head
+    sits visually centered with a small margin above for the antenna.
+  -->
+  <g transform="translate(4, 18) scale(3.3)">
+    <!-- Antenna line. -->
+    <line x1="18" y1="9" x2="18" y2="3" stroke="#0a0a0a" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- Antenna tip — yellow accent, the brand cue. -->
+    <circle cx="18" cy="3" r="2.2" fill="#ffffff" stroke="#0a0a0a" stroke-width="1.2"/>
+    <!-- Head body — thicker stroke so it survives the 16→128 downsample. -->
+    <rect x="4" y="9" width="28" height="22" rx="7" fill="#ffffff" stroke="#0a0a0a" stroke-width="2"/>
+    <!-- Ears. -->
+    <path d="M 7 13 L 11 4 L 15 13 Z" fill="#ffffff" stroke="#0a0a0a" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M 21 13 L 25 4 L 29 13 Z" fill="#ffffff" stroke="#0a0a0a" stroke-width="2" stroke-linejoin="round"/>
+    <!-- Eyes. -->
+    <circle cx="13" cy="20" r="2.2" fill="#0a0a0a"/>
+    <circle cx="23" cy="20" r="2.2" fill="#0a0a0a"/>
+    <!-- Mouth. -->
+    <ellipse cx="18" cy="25" rx="2.8" ry="2" fill="#0a0a0a"/>
+  </g>
 </svg>

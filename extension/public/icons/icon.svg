@@ -1,61 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  GH Claude Panel — extension mark.
+  Pat Before I Merge — extension mark.
 
-  Concept: a chat speech bubble containing diff lines (+ / −), conveying
-  "AI assistant reading and commenting on code changes." Designed to read
-  cleanly at 16×16 (toolbar) and scale to 128×128 (store card).
+  Brand family with patyourai.com: the same robot head (rounded
+  rectangle body, two pointed ears, two black dots for eyes, ellipse
+  mouth, antenna with yellow circle on top) sits inside a speech bubble
+  to signal "this opens a chat panel."
 
-  Palette borrowed loosely from GitHub Primer:
-    accent       #0969DA  (GitHub's blue)
-    accent-dark  #0550AE
-    added        #1A7F37  (GitHub's green for "+")
-    removed      #CF222E  (GitHub's red for "−")
-    chrome       #F6F8FA  (subtle background)
+  Black ink (#0a0a0a) on white (#ffffff), with the brand yellow
+  (#facc15) on the antenna tip. 2.5px strokes. No shading or gradients
+  — keeps the editorial/sketchbook style of patyourai.
+
+  Designed at 128×128. A smaller-detail variant (icon-small.svg) is
+  used for 16/32 px where the antenna and eye dots collapse.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GH Claude Panel">
-  <!-- Rounded square backdrop. Slight gradient gives the toolbar icon
-       some depth without crowding the silhouette at 16px. -->
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0969DA"/>
-      <stop offset="1" stop-color="#0550AE"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pat Before I Merge">
+  <!--
+    Rounded square backdrop. Soft mute-grey so the black ink reads
+    cleanly at toolbar sizes; matches patyourai's mute (#f4f4f5).
+  -->
+  <rect x="2" y="2" width="124" height="124" rx="26" fill="#f4f4f5" stroke="#0a0a0a" stroke-width="2.5"/>
 
-  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)"/>
-
-  <!-- Speech bubble. Tail bottom-left. Padding tuned so diff lines breathe
-       at small sizes. -->
+  <!--
+    Speech bubble — frames the robot to say "this is a chat surface."
+    Tail at the bottom-left. Drawn with the same 2.5px ink stroke and
+    white fill as the patyourai robot itself.
+  -->
   <path
-    d="M 28 30
-       L 100 30
-       Q 108 30 108 38
-       L 108 78
-       Q 108 86 100 86
-       L 52 86
-       L 38 100
-       L 40 86
-       L 28 86
-       Q 20 86 20 78
-       L 20 38
-       Q 20 30 28 30 Z"
-    fill="#F6F8FA"
+    d="M 18 30
+       L 110 30
+       Q 116 30 116 36
+       L 116 96
+       Q 116 102 110 102
+       L 50 102
+       L 30 120
+       L 36 102
+       L 18 102
+       Q 12 102 12 96
+       L 12 36
+       Q 12 30 18 30 Z"
+    fill="#ffffff"
+    stroke="#0a0a0a"
+    stroke-width="2.5"
+    stroke-linejoin="round"
   />
 
-  <!-- Diff lines inside the bubble:
-       "+" line (green), "−" line (red), context line (neutral).
-       Drawn as rounded rects with a leading glyph rect for the sign. -->
+  <!--
+    Robot head — scaled and translated from patyourai's icon.svg
+    (originally 36×36 viewBox). Centered inside the bubble at ~(64, 60).
 
-  <!-- + line -->
-  <rect x="30" y="42" width="10" height="6" rx="2" fill="#1A7F37"/>
-  <rect x="44" y="42" width="50" height="6" rx="2" fill="#DAFBE1"/>
+    Original coords: rect x4 y9 w28 h22 rx7; ears at (7,4)→(15,13)
+    and (21,4)→(29,13); eyes at (13,20) and (23,20); mouth at (18,25);
+    antenna line 18,9→18,3; antenna tip circle at (18,3) r=2.
 
-  <!-- context line -->
-  <rect x="30" y="54" width="10" height="6" rx="2" fill="#D1D9E0"/>
-  <rect x="44" y="54" width="40" height="6" rx="2" fill="#EAEEF2"/>
-
-  <!-- − line -->
-  <rect x="30" y="66" width="10" height="6" rx="2" fill="#CF222E"/>
-  <rect x="44" y="66" width="46" height="6" rx="2" fill="#FFEBE9"/>
+    Scale: 2.0× = 72×72 head area within the ~92×72 bubble interior.
+  -->
+  <g transform="translate(28, 22) scale(2.0)">
+    <!-- Antenna line (drawn first so the tip circle sits on top). -->
+    <line x1="18" y1="9" x2="18" y2="3" stroke="#0a0a0a" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- Antenna tip — yellow accent, the only color in the mark. -->
+    <circle cx="18" cy="3" r="2.2" fill="#facc15" stroke="#0a0a0a" stroke-width="1.4"/>
+    <!-- Head body. -->
+    <rect x="4" y="9" width="28" height="22" rx="7" fill="#ffffff" stroke="#0a0a0a" stroke-width="2.2"/>
+    <!-- Ears (drawn after the head body so the join with the head reads cleanly). -->
+    <path d="M 7 13 L 11 4 L 15 13 Z" fill="#ffffff" stroke="#0a0a0a" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M 21 13 L 25 4 L 29 13 Z" fill="#ffffff" stroke="#0a0a0a" stroke-width="2.2" stroke-linejoin="round"/>
+    <!-- Eyes. -->
+    <circle cx="13" cy="20" r="2" fill="#0a0a0a"/>
+    <circle cx="23" cy="20" r="2" fill="#0a0a0a"/>
+    <!-- Mouth. -->
+    <ellipse cx="18" cy="25" rx="2.5" ry="1.8" fill="#0a0a0a"/>
+  </g>
 </svg>
