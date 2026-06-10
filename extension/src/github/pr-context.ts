@@ -134,24 +134,38 @@ export function extractPRContext(): PRContext | null {
 
 /**
  * Async wrapper that ensures we get the diff regardless of which PR tab
- * the user is on.
+ * the user is on or which DOM viewer GitHub has rolled out.
  *
- * Strategy: if the current DOM has 0 files (e.g. user is on Conversation,
- * Commits, or Checks), fetch the PR's /files HTML page (same-origin,
- * uses session cookies natively — no CORS, no API tokens, no extra
- * host permissions). Parse the HTML with DOMParser and re-run our
- * normal diff selectors on the parsed document.
+ * GitHub has been migrating PR pages to a new diff viewer at
+ * /pull/N/changes (replacing /pull/N/files) that renders the diff in
+ * React, with a different DOM structure than the classic .file containers
+ * our selectors were written for. To stay viewer-agnostic, we:
  *
- * Why not the .diff endpoint or /pulls/N/files API:
- *   - .diff redirects to patch-diff.githubusercontent.com which doesn't
- *     send Access-Control-Allow-Origin headers, so even SW fetches fail
- *   - The REST API requires auth for private repos and is rate-limited
+ *   1. Try the live DOM with both classic and new-viewer selectors.
+ *   2. If 0 files, fetch <pr-url>.diff (raw unified diff text). This
+ *      endpoint redirects to patch-diff.githubusercontent.com — content
+ *      scripts running in the github.com origin can follow that redirect
+ *      because they inherit page-origin cookies and CORS context for
+ *      same-site responses. The extension-iframe origin can't, which is
+ *      why we route through the content script.
+ *   3. As a last resort, fetch the /files HTML page and re-scrape it.
+ *
+ * Order: live DOM (fastest) → .diff text (most reliable, raw bytes) →
+ * /files HTML (legacy fallback).
  */
 export async function extractPRContextWithDiffFetch(): Promise<PRContext | null> {
   const base = extractPRContext();
   if (!base) return null;
   if (base.files.length > 0) return base;
 
+  // Try the raw .diff endpoint first — same-origin, parser-friendly, and
+  // doesn't depend on which DOM viewer GitHub is shipping this week.
+  const diffResult = await fetchUnifiedDiff(base.url);
+  if (diffResult && diffResult.files.length > 0) {
+    return { ...base, files: diffResult.files, totalDiffChars: diffResult.totalDiffChars };
+  }
+
+  // Fallback: scrape the /files HTML.
   const filesUrl = buildFilesUrl(base.url);
   try {
     const resp = await fetch(filesUrl, { credentials: "include" });
@@ -166,11 +180,103 @@ export async function extractPRContextWithDiffFetch(): Promise<PRContext | null>
   }
 }
 
+/**
+ * Fetch GitHub's raw unified-diff for the PR and parse it into per-file
+ * blocks. Each file is annotated with the post-image line numbers in the
+ * gutter, matching the format collectDiffLines() produces, so the model
+ * sees a consistent layout regardless of which path produced it.
+ */
+async function fetchUnifiedDiff(
+  prUrl: string,
+): Promise<{ files: { path: string; diff: string }[]; totalDiffChars: number } | null> {
+  const diffUrl = prUrl
+    .split("#")[0]
+    .split("?")[0]
+    .replace(/\/(files|changes|commits|checks)(\/.*)?$/, "") + ".diff";
+  try {
+    const resp = await fetch(diffUrl, { credentials: "include" });
+    if (!resp.ok) return null;
+    const text = await resp.text();
+    const files = parseUnifiedDiffWithLineNumbers(text);
+    const totalDiffChars = files.reduce((n, f) => n + f.diff.length, 0);
+    return { files, totalDiffChars };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a raw unified diff (`git format-patch` style) and emit one entry
+ * per file, with lines prefixed by post-image line number — same shape
+ * collectDiffLines() produces from the DOM.
+ *
+ * Tracks left/right line counters per hunk so:
+ *   - context (' '): right number
+ *   - addition ('+'): right number
+ *   - deletion ('-'): left number
+ *
+ * Hunk headers (`@@ -L,n +R,m @@`) re-seed the counters.
+ */
+function parseUnifiedDiffWithLineNumbers(text: string): { path: string; diff: string }[] {
+  const out: { path: string; diff: string }[] = [];
+  const blocks = text.split(/^diff --git /m).slice(1);
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const header = lines[0] ?? "";
+    const m = header.match(/ b\/(.+)$/);
+    const path = m ? m[1] : "(unknown)";
+
+    let leftLine = 0;
+    let rightLine = 0;
+    const out_lines: string[] = [];
+
+    for (const raw of lines) {
+      const hunk = raw.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+      if (hunk) {
+        leftLine = parseInt(hunk[1], 10);
+        rightLine = parseInt(hunk[2], 10);
+        out_lines.push(raw);
+        continue;
+      }
+      // Skip headers we don't want to render line-numbered: file mode,
+      // ---/+++ markers, index hashes, "Binary files differ", etc.
+      if (
+        raw.startsWith("index ") ||
+        raw.startsWith("--- ") ||
+        raw.startsWith("+++ ") ||
+        raw.startsWith("new file mode") ||
+        raw.startsWith("deleted file mode") ||
+        raw.startsWith("similarity index") ||
+        raw.startsWith("rename from") ||
+        raw.startsWith("rename to") ||
+        raw.startsWith("Binary files") ||
+        raw.startsWith("\\ No newline")
+      ) {
+        continue;
+      }
+      if (raw.startsWith("+")) {
+        out_lines.push(`${String(rightLine).padStart(5, " ")} +${raw.slice(1)}`);
+        rightLine++;
+      } else if (raw.startsWith("-")) {
+        out_lines.push(`${String(leftLine).padStart(5, " ")} -${raw.slice(1)}`);
+        leftLine++;
+      } else if (raw.startsWith(" ")) {
+        out_lines.push(`${String(rightLine).padStart(5, " ")}  ${raw.slice(1)}`);
+        leftLine++;
+        rightLine++;
+      }
+      // else: blank or unknown line — drop
+    }
+    out.push({ path, diff: out_lines.join("\n") });
+  }
+  return out;
+}
+
 function buildFilesUrl(prUrl: string): string {
   const cleaned = prUrl
     .split("#")[0]
     .split("?")[0]
-    .replace(/\/(files|commits|checks)(\/.*)?$/, "");
+    .replace(/\/(files|changes|commits|checks)(\/.*)?$/, "");
   return `${cleaned}/files`;
 }
 

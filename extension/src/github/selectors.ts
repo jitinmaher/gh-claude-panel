@@ -21,8 +21,16 @@ export const PR_URL_RE = new RegExp(
 export const SELECTORS = {
   /** Title heading on the PR conversation page. */
   prTitle: "bdi.js-issue-title, h1.gh-header-title bdi",
-  /** Container for each file diff on the "Files changed" tab. */
-  fileDiff: "div.file[data-tagsearch-path], copilot-diff-entry",
+  /**
+   * Container for each file diff. Multiple selectors to cover GitHub's
+   * three known PR viewers:
+   *   - Classic /files: <div class="file" data-tagsearch-path="...">
+   *   - Copilot-era /files: <copilot-diff-entry>
+   *   - New /changes (React): <div data-file-path="..."> / [data-testid="diff-file"]
+   * Whichever the page currently renders, we querySelectorAll the union.
+   */
+  fileDiff:
+    "div.file[data-tagsearch-path], copilot-diff-entry, [data-file-path], [data-testid='diff-file']",
   /** Path of the file rendered in a given diff container. */
   fileDiffPath: "[data-path], .file-info a.Link--primary",
   /** All diff <table> rows including added/removed/context lines. */
