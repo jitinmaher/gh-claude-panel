@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BACKENDS,
   BackendId,
@@ -6,6 +6,7 @@ import {
   loadSettings,
   saveSettings,
 } from "../transports";
+import { isValidHost } from "../github/selectors";
 
 /**
  * Catalog of Claude model IDs to expose in the picker. Grouped by family;
@@ -70,7 +71,7 @@ export function OptionsPage() {
 
   return (
     <div className="options-shell">
-      <h1>GH Claude Panel</h1>
+      <h1>Pat Before I Merge</h1>
       <div className="lede">
         Settings sync to <code>chrome.storage.local</code>. The Anthropic API key
         never leaves your machine.
@@ -169,9 +170,14 @@ export function OptionsPage() {
           <div className="hint">
             Start the bridge with <code>npm run dev:bridge</code>. The token is
             printed to the console on first run and persisted to{" "}
-            <code>~/.gh-claude-panel/token</code>.
+            <code>~/.pat-before-i-merge/token</code>.
           </div>
         </div>
+      </section>
+
+      <section className="section">
+        <h2>GitHub Enterprise hosts</h2>
+        <EnterpriseHostsField />
       </section>
 
       <section className="section">
@@ -199,5 +205,190 @@ export function OptionsPage() {
         {saved && <span className="saved">Saved.</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Add / remove GitHub Enterprise hosts at runtime.
+ *
+ * Lives in its own component because it manages a separate piece of state
+ * (the list of hosts + the chrome.permissions grants behind each one) and
+ * has its own save path — every add/remove flushes immediately rather than
+ * waiting for the global Save button. That's because granting/revoking
+ * a permission is a user-facing Chrome dialog; if we batched it with
+ * other settings, users would see a permission prompt at "Save" time
+ * which would feel surprising.
+ */
+function EnterpriseHostsField() {
+  const [hosts, setHosts] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initial load + stay in sync if another tab changes the list.
+  useEffect(() => {
+    chrome.storage.local.get(["enterpriseHosts"]).then((r) => {
+      const v = (r as { enterpriseHosts?: string[] }).enterpriseHosts;
+      setHosts(Array.isArray(v) ? v : []);
+    });
+    const listener = (
+      changes: { [k: string]: chrome.storage.StorageChange },
+      area: chrome.storage.AreaName,
+    ) => {
+      if (area === "local" && changes.enterpriseHosts) {
+        setHosts(
+          Array.isArray(changes.enterpriseHosts.newValue)
+            ? changes.enterpriseHosts.newValue
+            : [],
+        );
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
+
+  const addHost = useCallback(async () => {
+    setError(null);
+    const cleaned = draft.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!isValidHost(cleaned)) {
+      setError("Enter a valid hostname like github.acme.com (no scheme, no path).");
+      return;
+    }
+    if (cleaned === "github.com") {
+      setError("github.com is always included — no need to add it.");
+      return;
+    }
+    if (hosts.includes(cleaned)) {
+      setError("That host is already in the list.");
+      return;
+    }
+    setBusy(true);
+    try {
+      // Request the host permission. Chrome shows a native prompt; resolves
+      // true on grant, false on deny. Must originate from a user gesture
+      // (the button click), which is why this runs in the click handler.
+      const granted = await chrome.permissions.request({
+        origins: [`https://${cleaned}/*`],
+      });
+      if (!granted) {
+        setError("Chrome denied the permission. The host wasn't added.");
+        return;
+      }
+      const next = [...hosts, cleaned];
+      await chrome.storage.local.set({ enterpriseHosts: next });
+      setHosts(next);
+      setDraft("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [draft, hosts]);
+
+  const removeHost = useCallback(
+    async (host: string) => {
+      setError(null);
+      setBusy(true);
+      try {
+        // Revoke the permission first; if Chrome refuses we keep the
+        // entry in storage so state stays consistent.
+        const removed = await chrome.permissions.remove({
+          origins: [`https://${host}/*`],
+        });
+        if (!removed) {
+          // Permission can't be removed (e.g. it's also covered by a
+          // broader pattern the user granted). Storage cleanup is still
+          // useful — drop it from the list.
+        }
+        const next = hosts.filter((h) => h !== host);
+        await chrome.storage.local.set({ enterpriseHosts: next });
+        setHosts(next);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [hosts],
+  );
+
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="enterprise-host">Add a host</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            id="enterprise-host"
+            type="text"
+            placeholder="github.acme.com"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addHost();
+              }
+            }}
+            disabled={busy}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="btn"
+            onClick={addHost}
+            disabled={busy || !draft.trim()}
+          >
+            Add
+          </button>
+        </div>
+        <div className="hint">
+          Adding a host triggers a Chrome permission prompt for that origin.
+          After granting, hard-reload any open tabs on the new host
+          (Cmd/Ctrl+Shift+R) so the content script attaches. github.com is
+          always included.
+        </div>
+        {error && (
+          <div className="hint" style={{ color: "var(--danger-fg)" }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {hosts.length > 0 && (
+        <div className="field">
+          <label>Added hosts</label>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {hosts.map((h) => (
+              <li
+                key={h}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "6px 10px",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  background: "var(--bg)",
+                }}
+              >
+                <code style={{ fontSize: 13 }}>{h}</code>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => removeHost(h)}
+                  disabled={busy}
+                  style={{ padding: "3px 10px", fontSize: 11 }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }

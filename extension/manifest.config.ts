@@ -1,20 +1,16 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 
 /**
- * To add another GitHub Enterprise host (e.g. github.acme.com):
+ * The static manifest only knows about public github.com. GitHub Enterprise
+ * hosts (github.acme.com, etc.) are added at runtime by the user through
+ * the options page, which calls chrome.permissions.request() — Chrome shows
+ * a native permission prompt and, on approval, the SW dynamically registers
+ * the content script for that host.
  *
- *  1. Add it to `content_scripts[].matches`,
- *     `host_permissions`, and `web_accessible_resources[].matches` below.
- *  2. Add the bare hostname to `GITHUB_HOSTS` in
- *     src/github/selectors.ts (the canonical list — background SW
- *     imports it from there).
- *  3. `npm run build:ext` and reload the extension.
- *
- * Chrome MV3 doesn't allow wildcard host_permissions like
- * `https://github.*`, so each GHE host must be declared explicitly.
- *
- * github.intuit.com is shipped pre-configured as a working example.
- * Remove it or replace it with your own GHE host as needed.
+ * `optional_host_permissions: ["https://*\/*"]` declares the *pattern space*
+ * the SW is allowed to request from; it does NOT grant access to anything
+ * at install time. (Chrome MV3 requires this declaration even though the
+ * actual access is opt-in per host.)
  */
 export default defineManifest({
   manifest_version: 3,
@@ -43,10 +39,7 @@ export default defineManifest({
   },
   content_scripts: [
     {
-      matches: [
-        "https://github.com/*",
-        "https://github.intuit.com/*",
-      ],
+      matches: ["https://github.com/*"],
       js: ["src/content/inject.ts"],
       run_at: "document_idle",
       all_frames: false,
@@ -59,18 +52,19 @@ export default defineManifest({
   permissions: ["storage", "activeTab", "scripting"],
   host_permissions: [
     "https://github.com/*",
-    "https://github.intuit.com/*",
     "https://api.anthropic.com/*",
     "http://127.0.0.1/*",
     "ws://127.0.0.1/*",
   ],
+  optional_host_permissions: ["https://*/*"],
   web_accessible_resources: [
     {
       resources: ["src/panel/index.html", "icons/*"],
-      matches: [
-        "https://github.com/*",
-        "https://github.intuit.com/*",
-      ],
+      // Match the union of static + every host the user might grant at
+      // runtime. The pattern below covers https://anything/*, which is
+      // safe here because the resources are extension-private (only
+      // pages with permission can actually load them).
+      matches: ["https://*/*"],
     },
   ],
 });

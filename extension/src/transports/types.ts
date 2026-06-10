@@ -61,6 +61,12 @@ export interface TransportSettings {
   bridgeToken?: string;
   defaultBackend?: BackendId;
   panelLayout?: PanelLayout;
+  /**
+   * User-added GitHub Enterprise hostnames. Bare hostnames, no scheme.
+   * Each one must have a matching chrome.permissions grant — the options
+   * page calls chrome.permissions.request() before adding to this list.
+   */
+  enterpriseHosts?: string[];
 }
 
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {

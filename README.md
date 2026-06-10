@@ -4,7 +4,7 @@
 
 Click the toolbar icon on any pull request, get a streaming review from Claude (cloud), your local `claude` CLI, or a local Cursor agent. The current PR's diff is attached automatically. Findings come back as colored cards with **Insert on line**, **Show in diff**, and **Copy** buttons that stage real review comments on the exact line in GitHub's UI.
 
-Works on **github.com** (classic and the new `/changes` viewer) and on **GitHub Enterprise** — just add your GHE host to two config files and reload. See [Adding more GitHub hosts](#adding-more-github-hosts).
+Works on **github.com** (classic and the new `/changes` viewer) and on **any GitHub Enterprise host** — add hosts at runtime from the options page, no rebuild needed. See [GitHub Enterprise hosts](#github-enterprise-hosts).
 
 https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 
@@ -92,7 +92,7 @@ Right-click the toolbar icon → **Options**.
 ```bash
 npm run dev:bridge
 ```
-1. Bridge prints a token on first run and saves it to `~/.gh-claude-panel/token`.
+1. Bridge prints a token on first run and saves it to `~/.pat-before-i-merge/token` (existing `~/.gh-claude-panel/token` is migrated automatically).
 2. Paste the token into Options → Bridge token → save.
 3. Change "Default backend" to **Local Claude Code** or **Local Cursor**.
 
@@ -218,31 +218,27 @@ pat-before-i-merge/
 ## Security
 
 - **API key** is stored in `chrome.storage.local`, scoped to this extension, sent only to `api.anthropic.com`. It never reaches the bridge.
-- **Bridge token** is generated with `crypto.randomBytes(24)` on first run and persisted to `~/.gh-claude-panel/token` mode 0600. The bridge binds to `127.0.0.1` only and rejects non-loopback connections.
+- **Bridge token** is generated with `crypto.randomBytes(24)` on first run and persisted to `~/.pat-before-i-merge/token` mode 0600. Legacy `~/.gh-claude-panel/token` is read and migrated on first run so existing users don't have to re-copy. The bridge binds to `127.0.0.1` only and rejects non-loopback connections.
 - **Diff fetching** uses your existing GitHub session cookies via same-origin content-script fetches — no GitHub OAuth scope or PAT needed.
 - **Review comments** are always staged as drafts via "Start a review" — never auto-submitted. You explicitly click Submit review in GitHub when you're ready.
 - **Local CLI permissions**: the bridge passes a default read-only allowlist (`Bash(gh:*),Bash(git:*),Read,Glob,Grep,WebFetch`) to `claude --print`. Override via `GH_CLAUDE_ALLOWED_TOOLS=...` only with intent.
 
 ---
 
-## Adding more GitHub hosts
+## GitHub Enterprise hosts
 
-The extension ships pre-configured for `github.com`. To use it against any other GHE host (e.g. `github.acme.com`), edit two files, rebuild, and reload:
+The extension ships with **just `github.com`** permitted at install time. To use it against any other GHE host:
 
-1. `extension/manifest.config.ts` — add the host to `content_scripts[].matches`, `host_permissions`, and `web_accessible_resources[].matches`.
-2. `extension/src/github/selectors.ts` — add the host to the `GITHUB_HOSTS` array.
+1. Open the extension's Options page (right-click the toolbar icon → Options).
+2. Under **GitHub Enterprise hosts**, type the hostname (e.g. `github.acme.com`) and click **Add**.
+3. Chrome shows a native permission prompt for that origin. Grant it.
+4. Hard-reload any open tabs on the new host so the content script attaches (Cmd/Ctrl+Shift+R).
 
-Then:
+That's it. The extension stores your hosts in `chrome.storage.local`, dynamically registers the content script for each granted host via `chrome.scripting.registerContentScripts()`, and revokes both on **Remove**.
 
-```bash
-npm run build:ext
-# chrome://extensions → reload the extension
-# Hard-reload the GHE tab so the new content script attaches
-```
+No rebuild, no sideload edits, no Intuit-specific anything baked in. The static manifest grants only `github.com` and declares `optional_host_permissions: ["https://*/*"]` as the pattern space the runtime is allowed to request from — actual access for any non-github.com host is opt-in per host.
 
-This is a manifest constraint, not a product limitation. Chrome MV3 requires `host_permissions` to be explicit at install time — there's no `https://github.*` wildcard. If you want runtime host management (an "Add an Enterprise host" button in the options page that uses `chrome.permissions.request()`), open an issue.
-
-> One host is pre-configured beyond `github.com` for the extension author's own use. Treat it as an example of where to add your own — replace it or leave it, your call.
+> **Why isn't this a one-click wildcard?** Chrome MV3 forbids wildcard `host_permissions` like `https://github.*` at install time. Each Enterprise host must be granted explicitly. The options page just makes that grant a button click instead of a manifest edit.
 
 ---
 

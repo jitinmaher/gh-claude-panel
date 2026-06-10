@@ -7,30 +7,55 @@
  */
 
 /**
- * Hosts we treat as "GitHub". This is the canonical list — the background
- * service worker imports it from here, the PR-URL regex below is built
- * from it, and the panel reads it for theme sync.
+ * GitHub hosts the extension recognizes.
  *
- * To support another GHE host (e.g. github.acme.com):
- *   1. Add the bare hostname here.
- *   2. Add `https://<host>/*` to manifest.config.ts in three places:
- *      content_scripts[].matches, host_permissions, and
- *      web_accessible_resources[].matches.
- *   3. `npm run build:ext` and reload the extension.
+ * `STATIC_HOSTS` is the compile-time list — only github.com. It ships
+ * pre-permitted in the manifest so the extension works out of the box on
+ * public GitHub without any setup.
  *
- * Chrome MV3 doesn't allow wildcard host_permissions, so each GHE host
- * must be declared explicitly at install time.
+ * Enterprise hosts (github.acme.com, etc.) are added at runtime by the
+ * user through the options page. They live in chrome.storage.local under
+ * `enterpriseHosts: string[]` and the user grants per-host permission via
+ * chrome.permissions.request() — no rebuild, no sideload edits.
  *
- * github.intuit.com ships pre-configured as a working example — replace
- * or remove as needed.
+ * Use the helpers below (`loadAllHosts`, `buildPRUrlRegex`) anywhere
+ * code needs the merged static + dynamic list.
  */
-export const GITHUB_HOSTS = ["github.com", "github.intuit.com"] as const;
+export const STATIC_HOSTS = ["github.com"] as const;
 
-const HOST_GROUP = GITHUB_HOSTS.map((h) => h.replace(/\./g, "\\.")).join("|");
+/** Read the user's runtime-added enterprise hosts from storage. */
+export async function loadEnterpriseHosts(): Promise<string[]> {
+  try {
+    const { enterpriseHosts } = (await chrome.storage.local.get(["enterpriseHosts"])) as {
+      enterpriseHosts?: string[];
+    };
+    return Array.isArray(enterpriseHosts) ? enterpriseHosts.filter(isValidHost) : [];
+  } catch {
+    return [];
+  }
+}
 
-export const PR_URL_RE = new RegExp(
-  `^https:\\/\\/(?:${HOST_GROUP})\\/[^/]+\\/[^/]+\\/pull\\/\\d+`,
-);
+/** Merged list of static + user-added hosts. */
+export async function loadAllHosts(): Promise<string[]> {
+  return [...STATIC_HOSTS, ...(await loadEnterpriseHosts())];
+}
+
+/** Build the PR-URL regex from an explicit host list. */
+export function buildPRUrlRegex(hosts: readonly string[]): RegExp {
+  const group = hosts.map((h) => h.replace(/\./g, "\\.")).join("|");
+  return new RegExp(`^https:\\/\\/(?:${group})\\/[^/]+\\/[^/]+\\/pull\\/\\d+`);
+}
+
+/**
+ * Basic hostname validation: lowercase letters, digits, dots, hyphens.
+ * Rejects schemes, paths, ports — we expect bare hostnames only.
+ */
+export function isValidHost(s: unknown): s is string {
+  return (
+    typeof s === "string" &&
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(s)
+  );
+}
 
 export const SELECTORS = {
   /** Title heading on the PR conversation page. */

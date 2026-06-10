@@ -2,25 +2,42 @@
  * MV3 service worker.
  *
  * Responsibilities:
- *  - Toggle the side panel when the toolbar action is clicked
- *  - Forward messages between the panel iframe and content script if needed
+ *  - Toggle the side panel when the toolbar action is clicked.
+ *  - Recognize whatever GitHub hosts the user has currently permitted
+ *    (the static github.com plus any enterprise hosts added at runtime
+ *    via the options page).
+ *  - Register the content script dynamically for newly-permitted
+ *    enterprise hosts so they get injected just like github.com does.
  *
- * Note: heavy work (streaming, fetch) happens inside the panel iframe itself,
- * not here. The SW is short-lived under MV3.
+ * Heavy work (streaming, fetch) happens inside the panel iframe itself.
+ * The SW is short-lived under MV3.
  */
 
-import { GITHUB_HOSTS } from "../github/selectors";
+import { STATIC_HOSTS, loadEnterpriseHosts, isValidHost } from "../github/selectors";
 
-// Synthesize URL prefixes from the canonical bare-hostname list so we
-// don't duplicate the list (which has bitten us before — adding a GHE
-// host meant remembering to update two files).
-const HOST_PREFIXES = GITHUB_HOSTS.map((h) => `https://${h}/`);
+/** URL prefixes derived from the merged host list. Refreshed on storage change. */
+let hostPrefixes: string[] = STATIC_HOSTS.map((h) => `https://${h}/`);
+
+async function refreshHostPrefixes(): Promise<void> {
+  const enterprise = await loadEnterpriseHosts();
+  hostPrefixes = [...STATIC_HOSTS, ...enterprise].map((h) => `https://${h}/`);
+}
+
+// Initial cache fill — and keep it fresh on changes.
+refreshHostPrefixes();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.enterpriseHosts) {
+    refreshHostPrefixes();
+  }
+});
+
+/* ─────────────── Toolbar click ─────────────── */
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !tab.url) return;
-  const isGithub = HOST_PREFIXES.some((h) => tab.url!.startsWith(h));
+  const isGithub = hostPrefixes.some((h) => tab.url!.startsWith(h));
   if (!isGithub) {
-    // Open the options page on non-GitHub tabs so users still have a path in.
+    // Off-GitHub click — give users a path into options.
     chrome.runtime.openOptionsPage();
     return;
   }
@@ -28,9 +45,8 @@ chrome.action.onClicked.addListener(async (tab) => {
     await chrome.tabs.sendMessage(tab.id, { type: "togglePanel" });
   } catch {
     // No content script on this tab — almost always means the tab was loaded
-    // before the extension (or before its last reload). Tell the user to
-    // refresh; we can't programmatically inject the bundled file by path
-    // here because Vite/CRX hashes its name.
+    // before the extension (or before its last reload), or it's a newly-added
+    // enterprise host the user hasn't refreshed yet.
     await chrome.action.setBadgeText({ tabId: tab.id, text: "!" });
     await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#d73a49" });
     await chrome.action.setTitle({
@@ -43,6 +59,111 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
+/* ─────────────── Dynamic content-script registration ───────────────
+ *
+ * The manifest's static `content_scripts` entry covers github.com. For
+ * user-added enterprise hosts we register at runtime via
+ * chrome.scripting.registerContentScripts(), keyed on a single id we
+ * own ("pat-enterprise-content"). The script file path comes from the
+ * built manifest so we don't have to hard-code Vite's hashed filename.
+ *
+ * We re-run reconciliation:
+ *  - On install / update (chrome.runtime.onInstalled).
+ *  - On SW startup (chrome.runtime.onStartup).
+ *  - On every change to enterpriseHosts in storage.
+ *  - On chrome.permissions.onAdded / onRemoved (so revoking from
+ *    chrome://extensions also cleans up).
+ *
+ * Reconcile = "make Chrome's registered set match the storage set,
+ * filtered to hosts we actually have permission for." That last
+ * filter is important: if a user adds a host but denies the
+ * permission prompt, we shouldn't try to register the script.
+ */
+
+const ENTERPRISE_SCRIPT_ID = "pat-enterprise-content";
+
+function getContentScriptFile(): string | null {
+  const manifest = chrome.runtime.getManifest();
+  const cs = manifest.content_scripts?.[0];
+  return cs?.js?.[0] ?? null;
+}
+
+async function reconcileEnterpriseContentScripts(): Promise<void> {
+  const file = getContentScriptFile();
+  if (!file) return;
+
+  const storedHosts = await loadEnterpriseHosts();
+  if (storedHosts.length === 0) {
+    // Nothing to register; remove any existing dynamic registration.
+    await safeUnregister(ENTERPRISE_SCRIPT_ID);
+    return;
+  }
+
+  // Filter to hosts we actually have permission to inject into.
+  const grantedOrigins = await new Promise<string[]>((resolve) => {
+    chrome.permissions.getAll((p) => resolve(p.origins ?? []));
+  });
+  const grantedHostnames = new Set(
+    grantedOrigins
+      .map((o) => {
+        try {
+          return new URL(o.replace(/\*/g, "x")).hostname;
+        } catch {
+          return null;
+        }
+      })
+      .filter((h): h is string => h !== null && isValidHost(h)),
+  );
+  const matches = storedHosts
+    .filter((h) => grantedHostnames.has(h))
+    .map((h) => `https://${h}/*`);
+
+  if (matches.length === 0) {
+    await safeUnregister(ENTERPRISE_SCRIPT_ID);
+    return;
+  }
+
+  // registerContentScripts errors if the id already exists, so always
+  // unregister-then-register. (update() exists but is fussier across
+  // Chrome versions.)
+  await safeUnregister(ENTERPRISE_SCRIPT_ID);
+  try {
+    await chrome.scripting.registerContentScripts([
+      {
+        id: ENTERPRISE_SCRIPT_ID,
+        matches,
+        js: [file],
+        runAt: "document_idle",
+        allFrames: false,
+      },
+    ]);
+  } catch (err) {
+    console.warn("[pat] failed to register enterprise content scripts:", err);
+  }
+}
+
+async function safeUnregister(id: string): Promise<void> {
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [id] });
+  } catch {
+    // No such id — that's fine.
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[pat-before-i-merge] installed");
+  reconcileEnterpriseContentScripts();
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  reconcileEnterpriseContentScripts();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.enterpriseHosts) {
+    reconcileEnterpriseContentScripts();
+  }
+});
+
+chrome.permissions.onAdded.addListener(() => reconcileEnterpriseContentScripts());
+chrome.permissions.onRemoved.addListener(() => reconcileEnterpriseContentScripts());

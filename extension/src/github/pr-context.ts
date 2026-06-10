@@ -1,4 +1,44 @@
-import { GITHUB_HOSTS, PR_URL_RE, SELECTORS } from "./selectors";
+import {
+  STATIC_HOSTS,
+  SELECTORS,
+  buildPRUrlRegex,
+  loadEnterpriseHosts,
+} from "./selectors";
+
+/**
+ * Cached merged host list + PR-URL regex. Initialized at module load with
+ * the static host (so isPRPage/parsePRUrl work synchronously from the
+ * first call), then refreshed when storage finishes loading and on every
+ * change. The cache is process-local — content script and SW each hold
+ * their own copy and keep them in sync via chrome.storage.onChanged.
+ */
+let cachedHosts: string[] = [...STATIC_HOSTS];
+let cachedPRRegex: RegExp = buildPRUrlRegex(cachedHosts);
+
+function refreshHostCache(hosts: string[]): void {
+  cachedHosts = hosts;
+  cachedPRRegex = buildPRUrlRegex(hosts);
+}
+
+// Initial async load — async, but isPRPage/parsePRUrl already work
+// against just github.com until this completes.
+loadEnterpriseHosts().then((enterprise) => {
+  refreshHostCache([...STATIC_HOSTS, ...enterprise]);
+});
+
+// Keep the cache fresh when the user adds or removes a host from the
+// options page. Works in both content-script and SW contexts.
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.enterpriseHosts) return;
+    const next = Array.isArray(changes.enterpriseHosts.newValue)
+      ? (changes.enterpriseHosts.newValue as string[])
+      : [];
+    refreshHostCache([...STATIC_HOSTS, ...next]);
+  });
+} catch {
+  /* chrome.storage may not be available in some test contexts */
+}
 
 export interface PRContext {
   url: string;
@@ -15,7 +55,7 @@ export interface PRContext {
 }
 
 export function isPRPage(url: string = location.href): boolean {
-  return PR_URL_RE.test(url);
+  return cachedPRRegex.test(url);
 }
 
 /**
@@ -79,9 +119,12 @@ function collectDiffLines(fileEl: HTMLElement): string {
 export function parsePRUrl(url: string = location.href):
   | { host: string; owner: string; repo: string; number: number }
   | null {
-  const hostGroup = GITHUB_HOSTS.map((h) => h.replace(/\./g, "\\.")).join("|");
+  // The regex from buildPRUrlRegex matches up to /pull/N but doesn't
+  // capture owner/repo/number — build a capturing variant from the same
+  // host list every call. Cheap; happens at most once per page navigation.
+  const group = cachedHosts.map((h) => h.replace(/\./g, "\\.")).join("|");
   const re = new RegExp(
-    `^https:\\/\\/(${hostGroup})\\/([^/]+)\\/([^/]+)\\/pull\\/(\\d+)`,
+    `^https:\\/\\/(${group})\\/([^/]+)\\/([^/]+)\\/pull\\/(\\d+)`,
   );
   const m = url.match(re);
   if (!m) return null;
