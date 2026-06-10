@@ -146,21 +146,34 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--bg-subtle);
   min-height: 44px;
+  /* Keep everything on one row; the title is the only flexible element
+     and gets truncated when space runs out. */
+  flex-wrap: nowrap;
 }
 
 .panel-header h1 {
   font-size: 14px;
   font-weight: 600;
   margin: 0;
-  flex: 1;
+  flex: 1 1 0;
   letter-spacing: -0.01em;
   color: var(--fg);
-  /* Allow truncation in narrow docked widths so the layout controls
-     and backend picker keep their space. */
+  /* Allow truncation (and full collapse to 0) in narrow docked widths
+     so layout controls, pickers, and icon buttons keep their space. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Lock the non-title controls so they never shrink past their content
+   width. The title (above) is the only thing that collapses when the
+   header runs out of room. */
+.panel-header .layout-controls,
+.panel-header .backend-picker,
+.panel-header .model-picker,
+.panel-header .icon-btn {
+  flex-shrink: 0;
 }
 
 /* ───────── Layout controls (grip + dock/float) ───────── */
@@ -251,17 +264,26 @@ body {
   border: 1px solid transparent;
   color: var(--fg-muted);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: 6px;
   font-size: 12px;
   font-family: inherit;
   line-height: 1;
+  /* Aligns the SVG glyphs with the rest of the row. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
 }
 
 .icon-btn:hover {
   background: var(--bg-muted);
   color: var(--fg);
+}
+
+.icon-btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 /* ───────── Context chips ───────── */
