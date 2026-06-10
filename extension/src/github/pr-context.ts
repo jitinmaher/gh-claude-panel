@@ -205,37 +205,40 @@ export function extractPRContext(): PRContext | null {
 }
 
 /**
- * Async wrapper that ensures we get the diff regardless of which PR
- * tab the user is on or which DOM viewer GitHub has rolled out.
+ * Async wrapper that fetches the PR diff. The GitHub REST API is the
+ * primary and authoritative source — it returns the complete unified
+ * diff regardless of which frontend viewer GitHub is shipping, and it
+ * carries the actual code content (the DOM viewers do not, reliably).
  *
- * Strategy (best-effort, in order):
+ * The page metadata (title, author, owner/repo/number) still comes from
+ * the cheap synchronous DOM read in extractPRContext; only the *diff*
+ * comes from the API.
  *
- *   1. Live DOM scrape. Works instantly on the classic /files viewer.
- *      May also catch the new /changes viewer if its DOM matches our
- *      selectors.
+ * Order:
+ *   1. REST API (api.github.com or <ghe-host>/api/v3, `Accept:
+ *      application/vnd.github.v3.diff`). Auth: GHE uses the session
+ *      cookie (same domain as the PR); private github.com needs a PAT.
+ *   2. Live DOM scrape — fast path that works on the classic /files
+ *      viewer. Tried only if REST returns nothing, since the new
+ *      /changes viewer and several GHE versions render line gutters with
+ *      blank code, which is worse than useless for review.
+ *   3. /files HTML scrape — last resort.
  *
- *   2. GitHub REST API. Hits api.github.com/repos/.../pulls/N with
- *      `Accept: application/vnd.github.v3.diff` for raw unified diff.
- *      Works across viewers (api is decoupled from frontend). For
- *      private repos, the user must set a PAT in options. On GHE, the
- *      API lives at <host>/api/v3, no PAT needed for repos visible to
- *      the user's session — but cookies don't cross to the API origin
- *      on github.com, so a PAT is mandatory for private github.com.
+ * Why DOM is no longer primary: across the classic viewer, the React
+ * /changes viewer, and GHE, DOM scraping produced wrong output three
+ * different ways (blank additions, blank everything, mislabeled lines).
+ * The raw-diff parser, by contrast, is verified correct against real
+ * PRs. So we trust the API and treat the DOM as the fallback.
  *
- *   3. /files HTML scrape. Last-resort; fetches the legacy server-
- *      rendered HTML and re-runs our selectors against the parsed doc.
- *      Useful if the user is signed-in and the API path is rate-limited.
- *
- * The `.diff` endpoint (e.g. github.com/X/Y/pull/N.diff) is NOT used:
- * it redirects to patch-diff.githubusercontent.com, which doesn't send
+ * The `.diff` endpoint (github.com/X/Y/pull/N.diff) is NOT used: it
+ * redirects to patch-diff.githubusercontent.com, which doesn't send
  * Access-Control-Allow-Origin, so the cross-origin redirect fails CORS.
  */
 export async function extractPRContextWithDiffFetch(): Promise<PRContext | null> {
   const base = extractPRContext();
   if (!base) return null;
-  if (base.files.length > 0) return base;
 
-  // 2. REST API.
+  // 1. REST API — primary source.
   const apiResult = await fetchDiffViaRestApi(base.host, base.owner, base.repo, base.number);
   if (apiResult && "files" in apiResult && apiResult.files.length > 0) {
     return {
@@ -244,12 +247,14 @@ export async function extractPRContextWithDiffFetch(): Promise<PRContext | null>
       totalDiffChars: apiResult.totalDiffChars,
     };
   }
-  // Capture an actionable error from the REST attempt to surface to the
-  // user if nothing else works.
   const apiError =
     apiResult && "error" in apiResult ? apiResult.error : undefined;
 
-  // 3. /files HTML scrape.
+  // 2. Live DOM scrape — only if REST gave us nothing. extractPRContext
+  //    already ran it; reuse those files if it managed to capture code.
+  if (base.files.length > 0) return base;
+
+  // 3. /files HTML scrape — last resort.
   const filesUrl = buildFilesUrl(base.url);
   try {
     const resp = await fetch(filesUrl, { credentials: "include" });
@@ -260,7 +265,7 @@ export async function extractPRContextWithDiffFetch(): Promise<PRContext | null>
     if (files.length === 0) return apiError ? { ...base, diffError: apiError } : base;
     return { ...base, files, totalDiffChars };
   } catch {
-    return base;
+    return apiError ? { ...base, diffError: apiError } : base;
   }
 }
 
