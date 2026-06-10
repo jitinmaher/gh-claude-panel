@@ -92,7 +92,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       };
       if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
 
-      const resp = await fetch(url, { headers });
+      // credentials:"include" sends the user's GHE session cookies. On a
+      // GitHub Enterprise host the API lives at the same domain as the
+      // PR page (github.acme.com/api/v3), so the existing browser session
+      // authenticates the request — no PAT needed for repos the user can
+      // already see. (On github.com, api.github.com is a different domain
+      // and won't receive github.com cookies, so a PAT is still required
+      // for private repos there.)
+      const resp = await fetch(url, { headers, credentials: "include" });
       if (!resp.ok) {
         sendResponse({
           ok: false,

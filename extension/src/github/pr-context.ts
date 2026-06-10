@@ -89,7 +89,8 @@ function collectDiffLines(fileEl: HTMLElement): string {
   const rows = fileEl.querySelectorAll<HTMLTableRowElement>(SELECTORS.fileDiffRows);
   if (rows.length === 0) return "";
   const out: string[] = [];
-  let capturedCodeChars = 0; // real (non-gutter) code text we managed to read
+  let changedRows = 0; // count of +/- rows
+  let changedRowsWithCode = 0; // +/- rows where we actually read code text
   rows.forEach((row) => {
     const cls = row.className;
     if (cls.includes("blob-expanded") || cls.includes("js-expandable-line")) return;
@@ -105,8 +106,10 @@ function collectDiffLines(fileEl: HTMLElement): string {
     }
 
     let prefix = " ";
-    if (cls.includes("blob-code-deletion")) prefix = "-";
-    else if (cls.includes("blob-code-addition")) prefix = "+";
+    const isDeletion = cls.includes("blob-code-deletion");
+    const isAddition = cls.includes("blob-code-addition");
+    if (isDeletion) prefix = "-";
+    else if (isAddition) prefix = "+";
 
     const numCells = row.querySelectorAll<HTMLTableCellElement>("td.blob-num");
     // First num cell = LEFT, second = RIGHT (unified view convention).
@@ -118,16 +121,27 @@ function collectDiffLines(fileEl: HTMLElement): string {
     const codeCell = row.querySelector("td.blob-code, td.blob-code-inner");
     if (!codeCell) return;
     const text = (codeCell.textContent ?? "").replace(/\n+/g, "");
-    capturedCodeChars += text.trim().length;
+
+    // Track whether the changed (+/-) rows actually carry code. On some
+    // GHE viewers context lines render their text but added/removed lines
+    // come back blank because the code lives in a structure we don't
+    // match — those rows are the whole point of a review.
+    if (isAddition || isDeletion) {
+      changedRows++;
+      if (text.trim().length > 0) changedRowsWithCode++;
+    }
+
     out.push(`${gutter} ${prefix}${text}`);
   });
 
-  // Guard against "gutters but no code": the new /changes React viewer
-  // matches our file-container selector and exposes line numbers, but the
-  // code text lives in a structure td.blob-code doesn't match, so we'd
-  // emit numbered blank lines. Returning "" here forces the caller to
-  // fall through to the REST API, which always has the real code.
-  if (capturedCodeChars === 0) return "";
+  // If this file has changed rows but we couldn't read code on (almost)
+  // any of them, the scrape is useless — return "" so the caller falls
+  // through to the REST API, which always carries the real code.
+  //
+  // Threshold: require code on at least half the changed rows. A few
+  // genuinely-blank added/removed lines (whitespace-only changes) are
+  // fine; an all-blank set means the viewer's DOM defeated our selector.
+  if (changedRows > 0 && changedRowsWithCode < changedRows / 2) return "";
   return out.join("\n");
 }
 
