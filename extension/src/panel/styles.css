@@ -638,6 +638,34 @@ body {
   color: var(--accent-fg);
 }
 
+/* Persistent "this finding has been staged" badge on the card. Replaces
+   the primary Insert button after a successful insertion; sits next to
+   a "Re-insert" secondary button for cases where the user deleted the
+   draft and wants to try again. */
+.md-finding-inserted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--success-fg, #1a7f37);
+  background: var(--success-bg, #dafbe1);
+  border: 1px solid var(--success-border, #1a7f3766);
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+
+:root[data-host-theme="dark"] .md-finding-inserted {
+  color: #3fb950;
+  background: #0d2615;
+  border-color: #3fb95066;
+}
+
+.md-finding-inserted svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* ───────── Toast ───────── */
 
 .gh-claude-toast {

@@ -36,6 +36,7 @@ export async function loadSettings(): Promise<TransportSettings> {
     "panelLayout",
     "enterpriseHosts",
     "githubToken",
+    "appendDraftedBy",
   ])) as TransportSettings;
   return {
     anthropicModel: stored.anthropicModel ?? DEFAULT_SETTINGS.anthropicModel,
@@ -46,6 +47,7 @@ export async function loadSettings(): Promise<TransportSettings> {
     anthropicApiKey: stored.anthropicApiKey,
     bridgeToken: stored.bridgeToken,
     githubToken: stored.githubToken,
+    appendDraftedBy: stored.appendDraftedBy ?? DEFAULT_SETTINGS.appendDraftedBy,
   };
 }
 

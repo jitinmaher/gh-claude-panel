@@ -384,6 +384,7 @@ function showToast(text: string) {
 }
 
 async function handleInsertFinding(req: {
+  findingId?: string;
   file?: string;
   line?: number;
   side?: "LEFT" | "RIGHT";
@@ -391,6 +392,7 @@ async function handleInsertFinding(req: {
 }) {
   if (!req.file || !req.line) {
     await copyToClipboardFallback(req.text, "no file/line — copied to clipboard");
+    postInsertResult(req.findingId, false, "no file/line");
     return;
   }
   const result = await insertFindingComment({
@@ -401,9 +403,27 @@ async function handleInsertFinding(req: {
   });
   if (result.ok) {
     showToast(`Staged as draft review comment on ${req.file}:${req.line}`);
+    postInsertResult(req.findingId, true);
   } else {
     await copyToClipboardFallback(req.text, `${result.reason} — copied to clipboard`);
+    postInsertResult(req.findingId, false, result.reason);
   }
+}
+
+/** Tell the panel iframe whether the insertion succeeded so the finding
+ * card can flip into its "Inserted" state. No-op if the panel iframe
+ * isn't mounted (shouldn't happen — the message originated there). */
+function postInsertResult(
+  findingId: string | undefined,
+  ok: boolean,
+  reason?: string,
+): void {
+  if (!findingId) return;
+  const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
+  frame?.contentWindow?.postMessage(
+    { type: "gh-claude-insert-result", findingId, ok, reason },
+    "*",
+  );
 }
 
 async function handlePreviewFinding(req: {

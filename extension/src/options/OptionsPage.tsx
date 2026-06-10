@@ -168,6 +168,29 @@ export function OptionsPage() {
       </section>
 
       <section className="section">
+        <h2>Review comments</h2>
+        <div className="field">
+          <label
+            htmlFor="append-drafted-by"
+            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+          >
+            <input
+              id="append-drafted-by"
+              type="checkbox"
+              checked={s.appendDraftedBy ?? true}
+              onChange={(e) => update("appendDraftedBy", e.target.checked)}
+              style={{ width: "auto", margin: 0 }}
+            />
+            <span>Append "Drafted via Pat Before I Merge" footer to each inserted comment</span>
+          </label>
+          <div className="hint">
+            The footer links back to the extension's repo so reviewers know the
+            comment was AI-drafted. Turn off for a quieter experience.
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
         <h2>Defaults</h2>
         <div className="field">
           <label htmlFor="default-backend">Default backend</label>

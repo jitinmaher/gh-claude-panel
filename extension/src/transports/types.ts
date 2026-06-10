@@ -75,6 +75,13 @@ export interface TransportSettings {
    * to pull request metadata).
    */
   githubToken?: string;
+  /**
+   * When true, every inserted review comment gets a small markdown
+   * footer linking back to this extension. Defaults to true — leave on
+   * to give reviewers a visible signal that the comment is AI-drafted.
+   * Turn off for a stealthier experience.
+   */
+  appendDraftedBy?: boolean;
 }
 
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
@@ -86,11 +93,16 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
 export const DEFAULT_SETTINGS: Required<
   Pick<
     TransportSettings,
-    "anthropicModel" | "bridgeUrl" | "defaultBackend" | "panelLayout"
+    | "anthropicModel"
+    | "bridgeUrl"
+    | "defaultBackend"
+    | "panelLayout"
+    | "appendDraftedBy"
   >
 > = {
   anthropicModel: "claude-sonnet-4-6",
   bridgeUrl: "ws://127.0.0.1:7321",
   defaultBackend: "anthropic-cloud",
   panelLayout: DEFAULT_PANEL_LAYOUT,
+  appendDraftedBy: true,
 };

@@ -1,4 +1,8 @@
 import { ReactNode } from "react";
+import { findingId, usePanel } from "./PanelContext";
+
+/** Repo URL for the "Drafted via" footer link. Single source of truth. */
+const REPO_URL = "https://github.com/jitinmaher/pat-before-i-merge";
 
 /**
  * Minimal markdown renderer tailored to assistant chat output.
@@ -244,15 +248,23 @@ const SEVERITY_LABELS: Record<Severity, string> = {
 };
 
 function FindingCard({ finding }: { finding: FindingMeta }) {
+  const { appendDraftedBy, insertedFindings } = usePanel();
   const canInsert = Boolean(finding.file && finding.line);
+  const id = findingId(finding);
+  const isInserted = insertedFindings.has(id);
+
   // The text we paste into GitHub's review comment box. Plain-text-ish
   // markdown — GitHub renders markdown in review comments. Prepend the
-  // severity tag so the comment reader knows the level.
+  // severity tag so the comment reader knows the level. The "Drafted
+  // via" footer links back to the repo and is opt-out via the
+  // appendDraftedBy setting.
+  const footer = appendDraftedBy
+    ? `_Drafted via [Pat Before I Merge](${REPO_URL})._`
+    : "";
   const commentText = [
     `**[${SEVERITY_LABELS[finding.severity]}] ${finding.title}**`,
     finding.body,
-    "",
-    "_Drafted via Pat Before I Merge._",
+    footer,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -261,6 +273,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
     window.parent.postMessage(
       {
         type: "gh-claude-insert-finding",
+        findingId: id,
         file: finding.file,
         line: finding.line,
         side: finding.side ?? "RIGHT",
@@ -332,25 +345,55 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
         </div>
       )}
       <div className="md-finding-actions">
+        {canInsert && isInserted && (
+          <span
+            className="md-finding-inserted"
+            title="This finding was staged as a draft review comment. Submit the review in GitHub when you're ready."
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                fill="currentColor"
+                d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"
+              />
+            </svg>
+            Inserted on line {finding.line}
+          </span>
+        )}
+        {canInsert && !isInserted && (
+          <button
+            type="button"
+            className="md-finding-btn md-finding-btn-primary"
+            onClick={onInsert}
+            title="Open GitHub's inline comment box on this line and stage as a review comment"
+          >
+            Insert on line {finding.line}
+          </button>
+        )}
         {canInsert && (
-          <>
-            <button
-              type="button"
-              className="md-finding-btn md-finding-btn-primary"
-              onClick={onInsert}
-              title="Open GitHub's inline comment box on this line and stage as a review comment"
-            >
-              Insert on line {finding.line}
-            </button>
-            <button
-              type="button"
-              className="md-finding-btn"
-              onClick={onPreview}
-              title="Scroll to and highlight this line in the diff"
-            >
-              Show in diff
-            </button>
-          </>
+          <button
+            type="button"
+            className="md-finding-btn"
+            onClick={onPreview}
+            title="Scroll to and highlight this line in the diff"
+          >
+            Show in diff
+          </button>
+        )}
+        {canInsert && isInserted && (
+          <button
+            type="button"
+            className="md-finding-btn"
+            onClick={onInsert}
+            title="Re-insert this comment (e.g. if you deleted the previous draft)"
+          >
+            Re-insert
+          </button>
         )}
         <button
           type="button"

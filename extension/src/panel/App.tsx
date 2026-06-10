@@ -17,6 +17,7 @@ import { BackendPicker } from "./BackendPicker";
 import { ModelPicker } from "./ModelPicker";
 import { EmptyState } from "./EmptyState";
 import { LayoutControls } from "./LayoutControls";
+import { PanelContext } from "./PanelContext";
 import { usePRContext } from "./usePRContext";
 import { useHostTheme } from "./useHostTheme";
 import { buildContextBlocks } from "../github/pr-context";
@@ -33,6 +34,14 @@ export default function App() {
   const [backendId, setBackendId] = useState<BackendId>("anthropic-cloud");
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  /**
+   * IDs (file:line:side:title) of findings the user successfully
+   * inserted as draft review comments. Kept in-memory per panel session;
+   * resets on iframe reload. Drives the "Inserted" badge on the card.
+   */
+  const [insertedFindings, setInsertedFindings] = useState<Set<string>>(
+    () => new Set(),
+  );
   const abortRef = useRef<AbortController | null>(null);
   const prCtx = usePRContext();
 
@@ -41,6 +50,26 @@ export default function App() {
       setSettings(s);
       if (s.defaultBackend) setBackendId(s.defaultBackend);
     });
+  }, []);
+
+  // Listen for insert-result acknowledgements from the content script.
+  // On success, mark the finding as inserted so the card swaps its
+  // primary button for a green checkmark.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== "gh-claude-insert-result") return;
+      const { ok, findingId: id } = e.data as { ok: boolean; findingId?: string };
+      if (ok && typeof id === "string") {
+        setInsertedFindings((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   const onPickBackend = useCallback((id: BackendId) => {
@@ -136,35 +165,42 @@ export default function App() {
   }
 
   return (
-    <div className="panel">
-      <header className="panel-header">
-        <LayoutControls />
-        <h1>Pat Before I Merge</h1>
-        <BackendPicker value={backendId} onChange={onPickBackend} />
-        <ModelPicker
-          value={settings.anthropicModel ?? "claude-sonnet-4-6"}
-          onChange={onPickModel}
+    <PanelContext.Provider
+      value={{
+        appendDraftedBy: settings.appendDraftedBy ?? true,
+        insertedFindings,
+      }}
+    >
+      <div className="panel">
+        <header className="panel-header">
+          <LayoutControls />
+          <h1>Pat Before I Merge</h1>
+          <BackendPicker value={backendId} onChange={onPickBackend} />
+          <ModelPicker
+            value={settings.anthropicModel ?? "claude-sonnet-4-6"}
+            onChange={onPickModel}
+          />
+          <button className="icon-btn" onClick={openOptions} title="Settings">
+            settings
+          </button>
+          <button className="icon-btn" onClick={onClose} title="Close">
+            close
+          </button>
+        </header>
+        <ContextChips prCtx={prCtx} />
+        {messages.length === 0 ? (
+          <EmptyState prCtx={prCtx} onPick={send} />
+        ) : (
+          <ChatStream messages={messages} />
+        )}
+        <Composer
+          busy={busy}
+          onSend={send}
+          onStop={stop}
+          onReset={messages.length > 0 ? reset : undefined}
         />
-        <button className="icon-btn" onClick={openOptions} title="Settings">
-          settings
-        </button>
-        <button className="icon-btn" onClick={onClose} title="Close">
-          close
-        </button>
-      </header>
-      <ContextChips prCtx={prCtx} />
-      {messages.length === 0 ? (
-        <EmptyState prCtx={prCtx} onPick={send} />
-      ) : (
-        <ChatStream messages={messages} />
-      )}
-      <Composer
-        busy={busy}
-        onSend={send}
-        onStop={stop}
-        onReset={messages.length > 0 ? reset : undefined}
-      />
-    </div>
+      </div>
+    </PanelContext.Provider>
   );
 }
 
