@@ -40,18 +40,43 @@ export interface AgentTransport {
   stream(req: ChatRequest, signal: AbortSignal): AsyncIterable<StreamEvent>;
 }
 
+/**
+ * Where the panel iframe sits on the host page.
+ *
+ * - `docked`: full-height bar on the left or right edge. `width` is in CSS px,
+ *   clamped 300..800 by the content script.
+ * - `floating`: window with rounded corners and a drop shadow. `left/top` are
+ *   viewport coordinates (px); `width/height` are the panel's size.
+ *
+ * Persisted across tabs via chrome.storage.local; restored on every mount.
+ */
+export type PanelLayout =
+  | { mode: "docked"; side: "left" | "right"; width: number }
+  | { mode: "floating"; left: number; top: number; width: number; height: number };
+
 export interface TransportSettings {
   anthropicApiKey?: string;
   anthropicModel?: string;
   bridgeUrl?: string;
   bridgeToken?: string;
   defaultBackend?: BackendId;
+  panelLayout?: PanelLayout;
 }
 
+export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
+  mode: "docked",
+  side: "right",
+  width: 420,
+};
+
 export const DEFAULT_SETTINGS: Required<
-  Pick<TransportSettings, "anthropicModel" | "bridgeUrl" | "defaultBackend">
+  Pick<
+    TransportSettings,
+    "anthropicModel" | "bridgeUrl" | "defaultBackend" | "panelLayout"
+  >
 > = {
   anthropicModel: "claude-sonnet-4-6",
   bridgeUrl: "ws://127.0.0.1:7321",
   defaultBackend: "anthropic-cloud",
+  panelLayout: DEFAULT_PANEL_LAYOUT,
 };

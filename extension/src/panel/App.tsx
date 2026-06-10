@@ -15,6 +15,7 @@ import { Composer } from "./Composer";
 import { ContextChips } from "./ContextChips";
 import { BackendPicker } from "./BackendPicker";
 import { EmptyState } from "./EmptyState";
+import { LayoutControls } from "./LayoutControls";
 import { usePRContext } from "./usePRContext";
 import { useHostTheme } from "./useHostTheme";
 import { buildContextBlocks } from "../github/pr-context";
@@ -131,6 +132,7 @@ export default function App() {
   return (
     <div className="panel">
       <header className="panel-header">
+        <LayoutControls />
         <h1>Claude on GitHub</h1>
         <BackendPicker value={backendId} onChange={onPickBackend} />
         <button className="icon-btn" onClick={openOptions} title="Settings">

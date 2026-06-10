@@ -155,6 +155,66 @@ body {
   flex: 1;
   letter-spacing: -0.01em;
   color: var(--fg);
+  /* Allow truncation in narrow docked widths so the layout controls
+     and backend picker keep their space. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───────── Layout controls (grip + dock/float) ───────── */
+
+.layout-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+}
+
+.layout-grip {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 4px;
+  cursor: grab;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.layout-grip:hover {
+  background: var(--bg-muted);
+  color: var(--fg);
+}
+
+.layout-grip:active {
+  cursor: grabbing;
+  background: var(--bg-muted);
+}
+
+.layout-grip svg {
+  fill: currentColor;
+  display: block;
+}
+
+.layout-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  min-width: 22px;
+}
+
+.layout-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.layout-btn.active:hover {
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 
 .backend-picker {

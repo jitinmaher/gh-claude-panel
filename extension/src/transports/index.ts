@@ -32,11 +32,13 @@ export async function loadSettings(): Promise<TransportSettings> {
     "bridgeUrl",
     "bridgeToken",
     "defaultBackend",
+    "panelLayout",
   ])) as TransportSettings;
   return {
     anthropicModel: stored.anthropicModel ?? DEFAULT_SETTINGS.anthropicModel,
     bridgeUrl: stored.bridgeUrl ?? DEFAULT_SETTINGS.bridgeUrl,
     defaultBackend: stored.defaultBackend ?? DEFAULT_SETTINGS.defaultBackend,
+    panelLayout: stored.panelLayout ?? DEFAULT_SETTINGS.panelLayout,
     anthropicApiKey: stored.anthropicApiKey,
     bridgeToken: stored.bridgeToken,
   };
