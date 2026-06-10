@@ -340,6 +340,16 @@ body {
   color: var(--fg);
 }
 
+.chip.chip-warn {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-border);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ───────── Chat stream ───────── */
 
 .chat-stream {

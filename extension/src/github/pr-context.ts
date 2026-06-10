@@ -52,6 +52,12 @@ export interface PRContext {
   files: { path: string; diff: string }[];
   /** Total characters across all collected diffs (for budget warnings). */
   totalDiffChars: number;
+  /**
+   * Set when every diff-fetch path failed and we have a specific reason
+   * worth telling the user (e.g. "private repo — add a GitHub token").
+   * The panel surfaces this instead of silently sending an empty diff.
+   */
+  diffError?: string;
 }
 
 export function isPRPage(url: string = location.href): boolean {
@@ -83,6 +89,7 @@ function collectDiffLines(fileEl: HTMLElement): string {
   const rows = fileEl.querySelectorAll<HTMLTableRowElement>(SELECTORS.fileDiffRows);
   if (rows.length === 0) return "";
   const out: string[] = [];
+  let capturedCodeChars = 0; // real (non-gutter) code text we managed to read
   rows.forEach((row) => {
     const cls = row.className;
     if (cls.includes("blob-expanded") || cls.includes("js-expandable-line")) return;
@@ -111,8 +118,16 @@ function collectDiffLines(fileEl: HTMLElement): string {
     const codeCell = row.querySelector("td.blob-code, td.blob-code-inner");
     if (!codeCell) return;
     const text = (codeCell.textContent ?? "").replace(/\n+/g, "");
+    capturedCodeChars += text.trim().length;
     out.push(`${gutter} ${prefix}${text}`);
   });
+
+  // Guard against "gutters but no code": the new /changes React viewer
+  // matches our file-container selector and exposes line numbers, but the
+  // code text lives in a structure td.blob-code doesn't match, so we'd
+  // emit numbered blank lines. Returning "" here forces the caller to
+  // fall through to the REST API, which always has the real code.
+  if (capturedCodeChars === 0) return "";
   return out.join("\n");
 }
 
@@ -208,23 +223,27 @@ export async function extractPRContextWithDiffFetch(): Promise<PRContext | null>
 
   // 2. REST API.
   const apiResult = await fetchDiffViaRestApi(base.host, base.owner, base.repo, base.number);
-  if (apiResult && apiResult.files.length > 0) {
+  if (apiResult && "files" in apiResult && apiResult.files.length > 0) {
     return {
       ...base,
       files: apiResult.files,
       totalDiffChars: apiResult.totalDiffChars,
     };
   }
+  // Capture an actionable error from the REST attempt to surface to the
+  // user if nothing else works.
+  const apiError =
+    apiResult && "error" in apiResult ? apiResult.error : undefined;
 
   // 3. /files HTML scrape.
   const filesUrl = buildFilesUrl(base.url);
   try {
     const resp = await fetch(filesUrl, { credentials: "include" });
-    if (!resp.ok) return base;
+    if (!resp.ok) return apiError ? { ...base, diffError: apiError } : base;
     const html = await resp.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
     const { files, totalDiffChars } = scrapeFilesFromDoc(doc);
-    if (files.length === 0) return base;
+    if (files.length === 0) return apiError ? { ...base, diffError: apiError } : base;
     return { ...base, files, totalDiffChars };
   } catch {
     return base;
@@ -251,46 +270,36 @@ async function fetchDiffViaRestApi(
   owner: string,
   repo: string,
   num: number,
-): Promise<{ files: { path: string; diff: string }[]; totalDiffChars: number } | null> {
-  const apiBase =
-    host === "github.com"
-      ? "https://api.github.com"
-      : `https://${host}/api/v3`;
-  const url = `${apiBase}/repos/${owner}/${repo}/pulls/${num}`;
-
-  // Pull token lazily so we don't have to thread settings through the
-  // call site (which lives in the content script and doesn't know about
-  // the panel's settings).
-  let token: string | undefined;
+): Promise<
+  | { files: { path: string; diff: string }[]; totalDiffChars: number }
+  | { error: string }
+  | null
+> {
+  // The fetch must run in the background service worker — content scripts
+  // run in the page origin and a cross-origin authenticated request to
+  // api.github.com fails CORS preflight. The SW has the host-permission
+  // CORS bypass. See background/index.ts → fetchPrDiff handler.
+  let resp: { ok: boolean; text?: string; status?: number; error?: string };
   try {
-    const { githubToken } = (await chrome.storage.local.get(["githubToken"])) as {
-      githubToken?: string;
-    };
-    token = githubToken;
-  } catch {
-    /* storage unavailable — proceed unauthenticated */
+    resp = await chrome.runtime.sendMessage({
+      type: "fetchPrDiff",
+      host,
+      owner,
+      repo,
+      number: num,
+    });
+  } catch (err) {
+    return { error: `Could not reach the extension worker: ${(err as Error).message}` };
   }
 
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3.diff",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!resp) return null;
+  if (!resp.ok) {
+    return { error: resp.error ?? "GitHub diff fetch failed." };
+  }
+  const text = resp.text ?? "";
+  if (!text) return null;
 
   try {
-    const resp = await fetch(url, { headers });
-    if (!resp.ok) {
-      // 401/403 → token missing or insufficient
-      // 404 → wrong host (GHE that doesn't expose /api/v3) or private repo
-      //   without a token. Either way, our caller falls back to /files HTML.
-      return null;
-    }
-    const text = await resp.text();
-    if (!text || text.startsWith("{")) {
-      // The Accept header was ignored and we got JSON instead of the
-      // diff body. Skip; fall back to HTML scrape.
-      return null;
-    }
     const files = parseUnifiedDiffWithLineNumbers(text);
     const totalDiffChars = files.reduce((n, f) => n + f.diff.length, 0);
     return { files, totalDiffChars };

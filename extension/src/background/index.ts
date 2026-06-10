@@ -60,6 +60,76 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
+/* ─────────────── REST-diff fetch proxy ───────────────
+ *
+ * The content script can't fetch api.github.com (or a GHE /api/v3 host)
+ * with an Authorization header: it runs in the page's origin, so the
+ * cross-origin request triggers a CORS preflight that GitHub's API
+ * rejects for arbitrary page origins. The background service worker,
+ * by contrast, gets the extension's host_permissions CORS bypass — so
+ * the authenticated fetch must happen here.
+ *
+ * The content script posts { type: "fetchPrDiff", host, owner, repo,
+ * number } and gets back { ok, text?, status?, error? }.
+ */
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== "fetchPrDiff") return false;
+  (async () => {
+    try {
+      const apiBase =
+        msg.host === "github.com"
+          ? "https://api.github.com"
+          : `https://${msg.host}/api/v3`;
+      const url = `${apiBase}/repos/${msg.owner}/${msg.repo}/pulls/${msg.number}`;
+
+      const { githubToken } = (await chrome.storage.local.get(["githubToken"])) as {
+        githubToken?: string;
+      };
+
+      const headers: Record<string, string> = {
+        Accept: "application/vnd.github.v3.diff",
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+      if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        sendResponse({
+          ok: false,
+          status: resp.status,
+          error: restErrorHint(resp.status, Boolean(githubToken)),
+        });
+        return;
+      }
+      const text = await resp.text();
+      if (!text || text.startsWith("{")) {
+        sendResponse({ ok: false, error: "API returned JSON, not a diff" });
+        return;
+      }
+      sendResponse({ ok: true, text });
+    } catch (err) {
+      sendResponse({ ok: false, error: (err as Error).message });
+    }
+  })();
+  return true; // keep the channel open for the async sendResponse
+});
+
+/** Human-readable hint for a failed REST diff fetch. */
+function restErrorHint(status: number, hasToken: boolean): string {
+  if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";
+  if (status === 403) {
+    return hasToken
+      ? "Token lacks access to this repo (403), or rate-limited."
+      : "Rate-limited or private repo (403). Add a GitHub token in Settings.";
+  }
+  if (status === 404) {
+    return hasToken
+      ? "PR not found (404) — the token may not have access to this repo."
+      : "Private repo (404). Add a GitHub token with repo read access in Settings.";
+  }
+  return `GitHub API error (${status}).`;
+}
+
 /* ─────────────── Dynamic content-script registration ───────────────
  *
  * The manifest's static `content_scripts` entry covers github.com. For
