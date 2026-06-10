@@ -176,39 +176,47 @@ export function extractPRContext(): PRContext | null {
 }
 
 /**
- * Async wrapper that ensures we get the diff regardless of which PR tab
- * the user is on or which DOM viewer GitHub has rolled out.
+ * Async wrapper that ensures we get the diff regardless of which PR
+ * tab the user is on or which DOM viewer GitHub has rolled out.
  *
- * GitHub has been migrating PR pages to a new diff viewer at
- * /pull/N/changes (replacing /pull/N/files) that renders the diff in
- * React, with a different DOM structure than the classic .file containers
- * our selectors were written for. To stay viewer-agnostic, we:
+ * Strategy (best-effort, in order):
  *
- *   1. Try the live DOM with both classic and new-viewer selectors.
- *   2. If 0 files, fetch <pr-url>.diff (raw unified diff text). This
- *      endpoint redirects to patch-diff.githubusercontent.com — content
- *      scripts running in the github.com origin can follow that redirect
- *      because they inherit page-origin cookies and CORS context for
- *      same-site responses. The extension-iframe origin can't, which is
- *      why we route through the content script.
- *   3. As a last resort, fetch the /files HTML page and re-scrape it.
+ *   1. Live DOM scrape. Works instantly on the classic /files viewer.
+ *      May also catch the new /changes viewer if its DOM matches our
+ *      selectors.
  *
- * Order: live DOM (fastest) → .diff text (most reliable, raw bytes) →
- * /files HTML (legacy fallback).
+ *   2. GitHub REST API. Hits api.github.com/repos/.../pulls/N with
+ *      `Accept: application/vnd.github.v3.diff` for raw unified diff.
+ *      Works across viewers (api is decoupled from frontend). For
+ *      private repos, the user must set a PAT in options. On GHE, the
+ *      API lives at <host>/api/v3, no PAT needed for repos visible to
+ *      the user's session — but cookies don't cross to the API origin
+ *      on github.com, so a PAT is mandatory for private github.com.
+ *
+ *   3. /files HTML scrape. Last-resort; fetches the legacy server-
+ *      rendered HTML and re-runs our selectors against the parsed doc.
+ *      Useful if the user is signed-in and the API path is rate-limited.
+ *
+ * The `.diff` endpoint (e.g. github.com/X/Y/pull/N.diff) is NOT used:
+ * it redirects to patch-diff.githubusercontent.com, which doesn't send
+ * Access-Control-Allow-Origin, so the cross-origin redirect fails CORS.
  */
 export async function extractPRContextWithDiffFetch(): Promise<PRContext | null> {
   const base = extractPRContext();
   if (!base) return null;
   if (base.files.length > 0) return base;
 
-  // Try the raw .diff endpoint first — same-origin, parser-friendly, and
-  // doesn't depend on which DOM viewer GitHub is shipping this week.
-  const diffResult = await fetchUnifiedDiff(base.url);
-  if (diffResult && diffResult.files.length > 0) {
-    return { ...base, files: diffResult.files, totalDiffChars: diffResult.totalDiffChars };
+  // 2. REST API.
+  const apiResult = await fetchDiffViaRestApi(base.host, base.owner, base.repo, base.number);
+  if (apiResult && apiResult.files.length > 0) {
+    return {
+      ...base,
+      files: apiResult.files,
+      totalDiffChars: apiResult.totalDiffChars,
+    };
   }
 
-  // Fallback: scrape the /files HTML.
+  // 3. /files HTML scrape.
   const filesUrl = buildFilesUrl(base.url);
   try {
     const resp = await fetch(filesUrl, { credentials: "include" });
@@ -224,22 +232,65 @@ export async function extractPRContextWithDiffFetch(): Promise<PRContext | null>
 }
 
 /**
- * Fetch GitHub's raw unified-diff for the PR and parse it into per-file
- * blocks. Each file is annotated with the post-image line numbers in the
- * gutter, matching the format collectDiffLines() produces, so the model
- * sees a consistent layout regardless of which path produced it.
+ * Fetch the PR's unified diff via the GitHub REST API.
+ *
+ * Endpoint (github.com): `https://api.github.com/repos/{o}/{r}/pulls/{n}`
+ * Endpoint (GHE):        `https://<host>/api/v3/repos/{o}/{r}/pulls/{n}`
+ *
+ * The `Accept: application/vnd.github.v3.diff` header switches the
+ * response body to raw unified diff text instead of the usual JSON.
+ *
+ * Auth:
+ *   - Public github.com repos work without a token (60/hr per IP).
+ *   - Private github.com repos require a PAT in settings.githubToken.
+ *   - GHE: a PAT is recommended; session cookies don't work because
+ *     the API host (when api.<host> exists) is a different origin.
  */
-async function fetchUnifiedDiff(
-  prUrl: string,
+async function fetchDiffViaRestApi(
+  host: string,
+  owner: string,
+  repo: string,
+  num: number,
 ): Promise<{ files: { path: string; diff: string }[]; totalDiffChars: number } | null> {
-  const diffUrl = prUrl
-    .split("#")[0]
-    .split("?")[0]
-    .replace(/\/(files|changes|commits|checks)(\/.*)?$/, "") + ".diff";
+  const apiBase =
+    host === "github.com"
+      ? "https://api.github.com"
+      : `https://${host}/api/v3`;
+  const url = `${apiBase}/repos/${owner}/${repo}/pulls/${num}`;
+
+  // Pull token lazily so we don't have to thread settings through the
+  // call site (which lives in the content script and doesn't know about
+  // the panel's settings).
+  let token: string | undefined;
   try {
-    const resp = await fetch(diffUrl, { credentials: "include" });
-    if (!resp.ok) return null;
+    const { githubToken } = (await chrome.storage.local.get(["githubToken"])) as {
+      githubToken?: string;
+    };
+    token = githubToken;
+  } catch {
+    /* storage unavailable — proceed unauthenticated */
+  }
+
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github.v3.diff",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) {
+      // 401/403 → token missing or insufficient
+      // 404 → wrong host (GHE that doesn't expose /api/v3) or private repo
+      //   without a token. Either way, our caller falls back to /files HTML.
+      return null;
+    }
     const text = await resp.text();
+    if (!text || text.startsWith("{")) {
+      // The Accept header was ignored and we got JSON instead of the
+      // diff body. Skip; fall back to HTML scrape.
+      return null;
+    }
     const files = parseUnifiedDiffWithLineNumbers(text);
     const totalDiffChars = files.reduce((n, f) => n + f.diff.length, 0);
     return { files, totalDiffChars };

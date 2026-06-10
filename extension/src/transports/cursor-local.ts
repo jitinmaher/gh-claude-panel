@@ -12,6 +12,13 @@ export class CursorLocalTransport implements AgentTransport {
   }
 
   stream(req: ChatRequest, signal: AbortSignal): AsyncIterable<StreamEvent> {
-    return bridgeStream("cursor", req, this.settings, signal);
+    const withModel: ChatRequest = {
+      ...req,
+      options: {
+        ...(req.options ?? {}),
+        model: req.options?.model ?? this.settings.anthropicModel,
+      },
+    };
+    return bridgeStream("cursor", withModel, this.settings, signal);
   }
 }

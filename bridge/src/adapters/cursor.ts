@@ -20,9 +20,13 @@ export class CursorAdapter implements Adapter {
       .split(/\s+/)
       .filter(Boolean);
 
+    // Forward the user's chosen model if one was passed through. The
+    // cursor-agent CLI accepts --model <id>; omit when not specified.
+    const modelArgs = req.options?.model ? ["--model", req.options.model] : [];
+
     const prompt = buildPrompt(req);
 
-    const child = spawn(bin, [...extra, prompt], {
+    const child = spawn(bin, [...extra, ...modelArgs, prompt], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 

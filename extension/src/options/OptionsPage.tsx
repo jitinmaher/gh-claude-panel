@@ -2,51 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import {
   BACKENDS,
   BackendId,
+  CUSTOM_MODEL_SENTINEL,
+  MODEL_CATALOG,
   TransportSettings,
+  isCatalogModel,
   loadSettings,
   saveSettings,
 } from "../transports";
 import { isValidHost } from "../github/selectors";
-
-/**
- * Catalog of Claude model IDs to expose in the picker. Grouped by family;
- * within each family newest first. Sourced from the claude-api skill on
- * 2026-06-09. If Anthropic ships a new model, add it here.
- *
- * The "Custom…" option lets users enter an ID we don't ship in the
- * dropdown (older snapshots, retired aliases, GHE proxies, etc.) without
- * waiting for us to update this list.
- */
-const MODEL_CATALOG: { group: string; models: { id: string; label: string }[] }[] = [
-  {
-    group: "Opus (most capable)",
-    models: [
-      { id: "claude-opus-4-8", label: "Claude Opus 4.8 (latest)" },
-      { id: "claude-opus-4-7", label: "Claude Opus 4.7" },
-      { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
-      { id: "claude-opus-4-5", label: "Claude Opus 4.5" },
-      { id: "claude-opus-4-1", label: "Claude Opus 4.1" },
-    ],
-  },
-  {
-    group: "Sonnet (balanced)",
-    models: [
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (latest)" },
-      { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-    ],
-  },
-  {
-    group: "Haiku (fastest)",
-    models: [{ id: "claude-haiku-4-5", label: "Claude Haiku 4.5 (latest)" }],
-  },
-];
-
-const CUSTOM_MODEL_SENTINEL = "__custom__";
-
-function isCatalogModel(id: string | undefined): boolean {
-  if (!id) return true; // empty = will fall back to default; treat as catalog
-  return MODEL_CATALOG.some((g) => g.models.some((m) => m.id === id));
-}
 
 export function OptionsPage() {
   const [s, setS] = useState<TransportSettings | null>(null);
@@ -178,6 +141,30 @@ export function OptionsPage() {
       <section className="section">
         <h2>GitHub Enterprise hosts</h2>
         <EnterpriseHostsField />
+      </section>
+
+      <section className="section">
+        <h2>GitHub access (optional)</h2>
+        <div className="field">
+          <label htmlFor="gh-token">Personal access token</label>
+          <input
+            id="gh-token"
+            type="password"
+            placeholder="ghp_... or github_pat_..."
+            value={s.githubToken ?? ""}
+            onChange={(e) => update("githubToken", e.target.value)}
+          />
+          <div className="hint">
+            Required for diff-fetching on <strong>private repositories</strong>{" "}
+            and to lift the 60-req/hr unauthenticated rate limit on public
+            repos. The token is sent only to{" "}
+            <code>api.github.com</code> (or your GHE host's{" "}
+            <code>/api/v3</code>). Create one at{" "}
+            <code>github.com/settings/tokens</code> with{" "}
+            <code>repo</code> read scope (classic) or read access to{" "}
+            <code>Pull requests</code> (fine-grained).
+          </div>
+        </div>
       </section>
 
       <section className="section">

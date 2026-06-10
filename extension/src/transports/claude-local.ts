@@ -12,6 +12,15 @@ export class ClaudeLocalTransport implements AgentTransport {
   }
 
   stream(req: ChatRequest, signal: AbortSignal): AsyncIterable<StreamEvent> {
-    return bridgeStream("claude", req, this.settings, signal);
+    // Forward the user's chosen model from settings so the bridge can pass
+    // it to `claude --model <id>`. Keep any caller-supplied options too.
+    const withModel: ChatRequest = {
+      ...req,
+      options: {
+        ...(req.options ?? {}),
+        model: req.options?.model ?? this.settings.anthropicModel,
+      },
+    };
+    return bridgeStream("claude", withModel, this.settings, signal);
   }
 }

@@ -14,6 +14,7 @@ import { ChatStream } from "./ChatStream";
 import { Composer } from "./Composer";
 import { ContextChips } from "./ContextChips";
 import { BackendPicker } from "./BackendPicker";
+import { ModelPicker } from "./ModelPicker";
 import { EmptyState } from "./EmptyState";
 import { LayoutControls } from "./LayoutControls";
 import { usePRContext } from "./usePRContext";
@@ -45,6 +46,11 @@ export default function App() {
   const onPickBackend = useCallback((id: BackendId) => {
     setBackendId(id);
     saveSettings({ defaultBackend: id });
+  }, []);
+
+  const onPickModel = useCallback((modelId: string) => {
+    setSettings((prev) => (prev ? { ...prev, anthropicModel: modelId } : prev));
+    saveSettings({ anthropicModel: modelId });
   }, []);
 
   const send = useCallback(
@@ -133,8 +139,12 @@ export default function App() {
     <div className="panel">
       <header className="panel-header">
         <LayoutControls />
-        <h1>Claude on GitHub</h1>
+        <h1>Pat Before I Merge</h1>
         <BackendPicker value={backendId} onChange={onPickBackend} />
+        <ModelPicker
+          value={settings.anthropicModel ?? "claude-sonnet-4-6"}
+          onChange={onPickModel}
+        />
         <button className="icon-btn" onClick={openOptions} title="Settings">
           settings
         </button>

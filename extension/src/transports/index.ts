@@ -4,6 +4,7 @@ import { CursorLocalTransport } from "./cursor-local";
 import { AgentTransport, BackendId, DEFAULT_SETTINGS, TransportSettings } from "./types";
 
 export * from "./types";
+export * from "./models";
 
 export function makeTransport(
   id: BackendId,
@@ -34,6 +35,7 @@ export async function loadSettings(): Promise<TransportSettings> {
     "defaultBackend",
     "panelLayout",
     "enterpriseHosts",
+    "githubToken",
   ])) as TransportSettings;
   return {
     anthropicModel: stored.anthropicModel ?? DEFAULT_SETTINGS.anthropicModel,
@@ -43,6 +45,7 @@ export async function loadSettings(): Promise<TransportSettings> {
     enterpriseHosts: stored.enterpriseHosts ?? [],
     anthropicApiKey: stored.anthropicApiKey,
     bridgeToken: stored.bridgeToken,
+    githubToken: stored.githubToken,
   };
 }
 

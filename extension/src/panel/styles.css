@@ -236,6 +236,16 @@ body {
   border-color: var(--fg-muted);
 }
 
+/* Model picker is the same chrome as backend-picker but narrower so the
+   header doesn't run out of space. The full label is in the option list
+   on click; the closed control just shows a truncated current value. */
+.model-picker {
+  max-width: 130px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .icon-btn {
   background: transparent;
   border: 1px solid transparent;

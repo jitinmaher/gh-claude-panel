@@ -67,6 +67,14 @@ export interface TransportSettings {
    * page calls chrome.permissions.request() before adding to this list.
    */
   enterpriseHosts?: string[];
+  /**
+   * Optional GitHub Personal Access Token. Used only when fetching diffs
+   * via the GitHub REST API — public repos work without one within the
+   * 60-req/hr unauthenticated rate limit; private repos need this set.
+   * Scope required: `repo:read` (or fine-grained equivalent: read access
+   * to pull request metadata).
+   */
+  githubToken?: string;
 }
 
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {

@@ -52,6 +52,7 @@ export default defineManifest({
   permissions: ["storage", "activeTab", "scripting"],
   host_permissions: [
     "https://github.com/*",
+    "https://api.github.com/*",
     "https://api.anthropic.com/*",
     "http://127.0.0.1/*",
     "ws://127.0.0.1/*",

@@ -26,6 +26,13 @@ export class ClaudeAdapter implements Adapter {
       "--allowedTools",
       allowed,
     ];
+    // Forward the user's chosen model if one was passed through. The
+    // `claude` CLI accepts --model <id>; omit when not specified so the
+    // CLI's own default (usually the user's last interactive choice or
+    // ANTHROPIC_MODEL env var) takes over.
+    if (req.options?.model) {
+      args.push("--model", req.options.model);
+    }
     // Pipe the prompt over stdin rather than argv: avoids quoting issues
     // with multi-line prompts containing shell-special chars (backticks,
     // newlines, hashes). The CLI accepts either, but stdin is the safer
