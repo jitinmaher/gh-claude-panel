@@ -173,19 +173,15 @@ export default function App() {
     >
       <div className="panel">
         <header className="panel-header">
-          <LayoutControls />
-          <h1>Pat Before I Merge</h1>
-          <BackendPicker value={backendId} onChange={onPickBackend} />
-          <ModelPicker
-            value={settings.anthropicModel ?? "claude-sonnet-4-6"}
-            onChange={onPickModel}
-          />
-          <button
-            className="icon-btn"
-            onClick={openOptions}
-            title="Settings"
-            aria-label="Settings"
-          >
+          <div className="panel-header-row">
+            <LayoutControls />
+            <h1>Pat Before I Merge</h1>
+            <button
+              className="icon-btn"
+              onClick={openOptions}
+              title="Settings"
+              aria-label="Settings"
+            >
             {/* Gear icon (Primer-style). 14px viewBox; sized via CSS. */}
             <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
               <path
@@ -208,6 +204,14 @@ export default function App() {
               />
             </svg>
           </button>
+          </div>
+          <div className="panel-header-row panel-header-row-secondary">
+            <BackendPicker value={backendId} onChange={onPickBackend} />
+            <ModelPicker
+              value={settings.anthropicModel ?? "claude-sonnet-4-6"}
+              onChange={onPickModel}
+            />
+          </div>
         </header>
         <ContextChips prCtx={prCtx} />
         {messages.length === 0 ? (

@@ -138,17 +138,34 @@ body {
 
 /* ───────── Header ───────── */
 
+/*
+ * Two-row header: row 1 is always-visible chrome (layout controls,
+ * title, settings, close); row 2 is the backend + model pickers.
+ *
+ * Previously we tried to cram everything into one row, which clipped
+ * the trailing icon buttons at 420px because total content width was
+ * ~600px and the flex algorithm shrank the title to zero but couldn't
+ * shrink the rest.
+ *
+ * The pickers go in the secondary row where they have full width and
+ * room to breathe; the icon buttons stay on the top row where the
+ * close-the-panel control needs to be reachable.
+ */
 .panel-header {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-subtle);
-  min-height: 44px;
-  /* Keep everything on one row; the title is the only flexible element
-     and gets truncated when space runs out. */
+}
+
+.panel-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .panel-header h1 {
@@ -159,21 +176,32 @@ body {
   letter-spacing: -0.01em;
   color: var(--fg);
   /* Allow truncation (and full collapse to 0) in narrow docked widths
-     so layout controls, pickers, and icon buttons keep their space. */
+     so layout controls and the icon buttons keep their space. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Lock the non-title controls so they never shrink past their content
-   width. The title (above) is the only thing that collapses when the
-   header runs out of room. */
+/* Lock the non-title controls in row 1 so they never shrink past
+   their content width. The title is the only thing that collapses. */
 .panel-header .layout-controls,
-.panel-header .backend-picker,
-.panel-header .model-picker,
 .panel-header .icon-btn {
   flex-shrink: 0;
+}
+
+/* Secondary row: pickers share the full panel width. Each picker takes
+   an equal share of the row, but with a max-width so very wide panels
+   don't stretch them into giant dropdowns. */
+.panel-header-row-secondary {
+  gap: 8px;
+}
+
+.panel-header-row-secondary .backend-picker,
+.panel-header-row-secondary .model-picker {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 220px;
 }
 
 /* ───────── Layout controls (grip + dock/float) ───────── */
@@ -249,11 +277,9 @@ body {
   border-color: var(--fg-muted);
 }
 
-/* Model picker is the same chrome as backend-picker but narrower so the
-   header doesn't run out of space. The full label is in the option list
-   on click; the closed control just shows a truncated current value. */
+/* Model picker shares the backend-picker chrome. Sizing is set by the
+   secondary header row's flex rules (.panel-header-row-secondary). */
 .model-picker {
-  max-width: 130px;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
