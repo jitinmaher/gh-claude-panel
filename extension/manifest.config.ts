@@ -2,12 +2,12 @@ import { defineManifest } from "@crxjs/vite-plugin";
 
 export default defineManifest({
   manifest_version: 3,
-  name: "GH Claude Panel",
+  name: "Pat Before I Merge",
   version: "0.1.0",
   description:
-    "Side-panel chat for reviewing GitHub PRs with Claude, local Claude Code, or Cursor agents.",
+    "Side-panel that pats your PR before you merge it — uses Claude (cloud), local Claude Code, or local Cursor to flag bugs and suggest review comments, all without leaving GitHub.",
   action: {
-    default_title: "Toggle Claude side panel",
+    default_title: "Toggle Pat Before I Merge",
     default_icon: {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

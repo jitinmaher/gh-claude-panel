@@ -2,13 +2,16 @@
 import { startServer } from "../src/server.js";
 import { loadOrCreateToken, tokenPath } from "../src/auth.js";
 
-const PORT = Number(process.env.GH_CLAUDE_BRIDGE_PORT ?? 7321);
-const HOST = process.env.GH_CLAUDE_BRIDGE_HOST ?? "127.0.0.1";
+const PORT = Number(
+  process.env.PAT_BRIDGE_PORT ?? process.env.GH_CLAUDE_BRIDGE_PORT ?? 7321,
+);
+const HOST =
+  process.env.PAT_BRIDGE_HOST ?? process.env.GH_CLAUDE_BRIDGE_HOST ?? "127.0.0.1";
 
 async function main() {
   const { token, created } = await loadOrCreateToken();
 
-  console.log("=== GH Claude Panel — local bridge ===");
+  console.log("=== Pat Before I Merge — local bridge ===");
   console.log(`Token file: ${tokenPath()}`);
   if (created) {
     console.log("(new token generated on first run)");

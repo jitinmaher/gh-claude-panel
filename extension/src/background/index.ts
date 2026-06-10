@@ -39,5 +39,5 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("[gh-claude-panel] installed");
+  console.log("[pat-before-i-merge] installed");
 });

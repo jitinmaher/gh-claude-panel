@@ -1,14 +1,14 @@
 {
-  "name": "gh-claude-panel-bridge",
+  "name": "pat-before-i-merge-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "gh-claude-bridge": "./dist/bin/gh-claude-bridge.js"
+    "pat-bridge": "./dist/bin/pat-bridge.js"
   },
   "scripts": {
-    "dev": "tsx watch bin/gh-claude-bridge.ts",
-    "start": "tsx bin/gh-claude-bridge.ts",
+    "dev": "tsx watch bin/pat-bridge.ts",
+    "start": "tsx bin/pat-bridge.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },

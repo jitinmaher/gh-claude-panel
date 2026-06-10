@@ -1,45 +1,29 @@
+# Pat Before I Merge
 
-# gh-claude-panel
+> A Chrome side panel that reviews your GitHub PR before you hit merge — without leaving the page.
 
-> A Chrome side panel that lets Claude review your GitHub pull requests in place — no context switching, no copy-paste.
+Click the toolbar icon on any pull request, get a streaming review from Claude (cloud), your local `claude` CLI, or a local Cursor agent. The current PR's diff is attached automatically. Findings come back as colored cards with **Insert on line**, **Show in diff**, and **Copy** buttons that stage real review comments on the exact line in GitHub's UI.
 
-One click on the toolbar icon slides a chat panel out from the right edge of any GitHub PR. The current PR's diff, title, and metadata are attached to every message automatically. Pick between three backends from a dropdown:
-
-- **Anthropic Cloud** — direct streaming from the Claude API. Bring your own key.
-- **Local Claude Code** — your `claude` CLI on your machine, with its tools, MCPs, and credentials.
-- **Local Cursor** — your `cursor-agent` CLI.
-
-Works on **github.com** and **GitHub Enterprise** hosts.
+Works on **github.com** (classic and the new `/changes` viewer) and **github.intuit.com** (GitHub Enterprise).
 
 https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 
 ---
 
-## Features
+## What it does
 
-- **Slide-out side panel** — pinned to the right edge, survives GitHub's Turbo / pjax navigation, doesn't disrupt the page
-- **Three backends, one UI** — swap between cloud Claude, local Claude Code, and Cursor with a dropdown
-- **Auto-attached PR context** — diff, file list, title, author scraped from the DOM; falls back to fetching `<pr-url>.diff` when the diff isn't rendered on the current tab
-- **Markdown rendering** — code fences, lists, headings, inline code, bold/italic
-- **Severity-coded finding cards** — Claude wraps issues in `finding:high|medium|low|info` fenced blocks; UI renders them as red/amber/green/blue cards with badges
-- **Live streaming animation** — pulsing accent border + animated dots while Claude is thinking, smooth transition to streamed text
-- **Theme-aware** — inherits GitHub's font stack and theme (data-color-mode); follows dark/light toggles automatically
-- **Quick prompts** — preset starter buttons for the empty state ("Review this PR", "Suggest a better title", etc.)
-- **Local bridge** — token-authenticated WebSocket daemon on `127.0.0.1` for talking to local CLIs without exposing them to the internet
-
----
-
-## Screenshots
-
-> Replace these placeholders with actual screenshots once you've taken them.
-
-| Empty state | Streaming review |
+| | |
 |---|---|
-| _panel-empty-state.png_ | _panel-streaming.png_ |
-
-| Severity findings | Settings |
-|---|---|
-| _panel-findings.png_ | _options-page.png_ |
+| **One-click review** | Toolbar icon → side panel slides in. PR diff, title, author, file list, and per-line numbers are scraped from the page and attached to every message. |
+| **Three backends** | Cloud Claude (bring your own API key), local `claude` CLI via a small bridge daemon, or local `cursor-agent` via the same bridge. Pick from a dropdown at the top of the panel. |
+| **Findings as cards** | Claude wraps issues in `finding:high\|medium\|low\|info` fenced blocks with `file:`, `line:`, `side:` metadata. The UI renders each as a red / amber / green / blue card with a severity badge. |
+| **Insert on line** | Each card with a valid file+line has an **Insert on line N** button. Clicking it navigates to the Files Changed tab if needed, opens GitHub's inline comment box on that line, fills it with the finding text, and clicks **Start a review** — the comment is staged as a draft. You submit the whole review yourself. |
+| **Show in diff** | Hover or click the file:line chip on a card to scroll the diff to that row and pulse a yellow highlight. Read-only — opens no forms. |
+| **Movable panel** | Drag the grip in the header to dock left, dock right, or float as a window anywhere on the page. Resize docked panels via the inner edge. Position persists across tabs. |
+| **Diff-aware** | The diff fetch tries three paths: live DOM scrape → raw `.diff` endpoint → `/files` HTML fallback. Works on the classic `/files` viewer and the new React `/changes` viewer. |
+| **Streaming UX** | Pulsing accent border + animated dots while Claude is thinking, smooth transition to streamed markdown text. |
+| **Theme-aware** | Reads GitHub's `data-color-mode` and font stack at mount, follows light/dark/auto toggles automatically. |
+| **No context-switching** | Quick-prompt buttons in the empty state ("Review end-to-end", "Suggest a clearer title", "What test coverage is missing?"). |
 
 ---
 
@@ -50,19 +34,21 @@ https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 │  Chrome extension (MV3)         │      │  Local bridge (Node)      │
 │                                 │      │                           │
 │  ┌─────────────────────────┐    │      │  WebSocket :7321          │
-│  │ background service      │    │      │  127.0.0.1 only           │
-│  │ worker (toolbar action) │    │      │  Token auth               │
+│  │ background SW           │    │      │  127.0.0.1 only           │
+│  │ (toolbar action)        │    │      │  Token auth               │
 │  └─────────────────────────┘    │      │                           │
 │  ┌─────────────────────────┐    │      │  ┌──────────────────┐     │
 │  │ content script          │ ws ├─────►│  │ ClaudeAdapter    │     │
-│  │ - iframe injection      │    │      │  │ spawns `claude`  │     │
-│  │ - DOM scraping          │    │      │  └──────────────────┘     │
-│  └─────────────────────────┘    │      │  ┌──────────────────┐     │
-│  ┌─────────────────────────┐    │      │  │ CursorAdapter    │     │
-│  │ side panel (iframe)     │    │      │  │ spawns `cursor`  │     │
-│  │ - React UI              │    │      │  └──────────────────┘     │
-│  │ - markdown renderer     │    │      └───────────────────────────┘
-│  │ - transports x 3        │    │
+│  │ - iframe injection      │    │      │  │ spawns `claude   │     │
+│  │ - drag + dock + resize  │    │      │  │  --print`        │     │
+│  │ - DOM scrape + .diff    │    │      │  └──────────────────┘     │
+│  │ - review-comment insert │    │      │  ┌──────────────────┐     │
+│  └─────────────────────────┘    │      │  │ CursorAdapter    │     │
+│  ┌─────────────────────────┐    │      │  │ spawns `cursor-  │     │
+│  │ side panel (iframe)     │    │      │  │  agent`          │     │
+│  │ - React + markdown      │    │      │  └──────────────────┘     │
+│  │ - finding cards         │    │      └───────────────────────────┘
+│  │ - 3 transport impls     │    │
 │  └─────────────────────────┘    │      ┌───────────────────────────┐
 │  ┌─────────────────────────┐    │ HTTPS│  api.anthropic.com        │
 │  │ options page            │    ├─────►│  /v1/messages (SSE)       │
@@ -70,7 +56,7 @@ https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 └─────────────────────────────────┘
 ```
 
-All three backends implement a common `AgentTransport` interface (`stream(req, signal): AsyncIterable<StreamEvent>`), so the UI is agnostic to which one is selected. See [`extension/src/transports/types.ts`](./extension/src/transports/types.ts).
+All three backends implement a common `AgentTransport` interface (`stream(req, signal): AsyncIterable<StreamEvent>`), so the UI doesn't know which one is active. See [`extension/src/transports/types.ts`](./extension/src/transports/types.ts).
 
 ---
 
@@ -79,38 +65,38 @@ All three backends implement a common `AgentTransport` interface (`stream(req, s
 Requires Node 20+ (Vite 5 / Chrome's MV3 module loader).
 
 ```bash
-# Clone and install
-git clone <repo-url> gh-claude-panel
-cd gh-claude-panel
+git clone https://github.com/jitinmaher/pat-before-i-merge.git
+cd pat-before-i-merge
 npm install
-
-# Build the extension
 npm run build:ext
 
-# Load it into Chrome
+# Load it into Chrome:
 #   chrome://extensions
-#   → toggle "Developer mode" on
+#   → toggle Developer mode on
 #   → "Load unpacked"
 #   → select extension/dist
 ```
 
-Then click the toolbar icon on any github.com PR.
+Then click the toolbar icon on any GitHub PR.
 
 ### Configure backends
 
 Right-click the toolbar icon → **Options**.
 
 **For Anthropic Cloud (default):**
-- Paste an API key from `console.anthropic.com` → Save.
+1. Get an API key from `console.anthropic.com`.
+2. Paste into Options → save.
+3. Pick a model from the grouped dropdown (defaults to Sonnet 4.6). If the model you want isn't listed, choose **Custom…** and type the ID.
 
 **For Local Claude Code / Cursor:**
-- Start the bridge in a separate terminal:
-  ```bash
-  npm run dev:bridge
-  ```
-- Copy the token printed to the console.
-- Paste it into Options → "Bridge token" → Save.
-- Change "Default backend" to "Local Claude Code" or "Local Cursor".
+```bash
+npm run dev:bridge
+```
+1. Bridge prints a token on first run and saves it to `~/.gh-claude-panel/token`.
+2. Paste the token into Options → Bridge token → save.
+3. Change "Default backend" to **Local Claude Code** or **Local Cursor**.
+
+Local backends use your existing `claude` / `cursor-agent` CLI with their full tool access. The bridge passes `--allowedTools "Bash(gh:*),Bash(git:*),Read,Glob,Grep,WebFetch"` by default so the agent can run `gh pr view`, `git diff`, etc. without prompting. Override with `GH_CLAUDE_ALLOWED_TOOLS=...`.
 
 ### Development workflow
 
@@ -119,112 +105,155 @@ npm run dev:ext       # Vite watch build → extension/dist
 npm run dev:bridge    # tsx watch the bridge daemon
 ```
 
-Reload the extension in `chrome://extensions` after the first build, then HMR usually picks up changes automatically. Hard-reload the GitHub tab (Cmd+Shift+R) after extension changes to re-inject the content script.
+After extension changes: reload it in `chrome://extensions`, then hard-reload the GitHub tab (Cmd+Shift+R) so the new content script attaches.
+
+---
+
+## How the review-comment insertion works
+
+Claude is instructed (via the system prompt in [`App.tsx`](./extension/src/panel/App.tsx)) to wrap concrete issues like this:
+
+````
+```finding:high
+file: src/auth.ts
+line: 42
+side: RIGHT
+title: Concurrent writes can corrupt the cache.
+The new `updateCache()` writes without a lock. Two concurrent
+calls will interleave and leave the map inconsistent.
+```
+````
+
+The panel renders this as a card with the file:line chip below the title and three buttons:
+
+- **Insert on line 42** — the content script does the equivalent of:
+  1. If you're on Conversation/Commits/Checks, click the Files Changed tab anchor (Turbo-friendly, no reload).
+  2. Find the row by `(file, line, side)` — checks both classic `td.blob-num[data-line-number=...][data-side=...]` and the new viewer's selectors.
+  3. Scroll into view, click GitHub's `+` button.
+  4. Fill the textarea via the native value setter + input event (so React state updates).
+  5. Click **Start a review** to queue a draft. Nothing is submitted until you hit Submit review.
+- **Show in diff** — same row-finding logic, but read-only: scroll + flash a yellow highlight on the row.
+- **Copy** — copies the comment markdown to clipboard.
+
+If the file/line can't be resolved (Claude hallucinated a line, file isn't in the PR, GitHub selectors changed), the comment falls back to clipboard with a toast explaining why.
+
+The diff context the model sees is line-numbered — each diff line is prefixed with its post-image line number (right side) or pre-image line number (for deletions, left side):
+
+```
+@@ -10,7 +10,9 @@
+   10   const x = 1;
+   11 - const y = 2;
+   12 + const y = 3;
+```
+
+This is what makes "line 42" actually mean line 42.
 
 ---
 
 ## Severity findings
 
-When Claude reviews a PR, the system prompt asks it to wrap concrete issues in a fenced block with a severity tag:
+The four severity levels (with aliases):
 
-````
-```finding:high
-Concurrent writes can corrupt the cache.
-The new `updateCache()` writes without a lock. Two concurrent calls
-will interleave and leave the map in an inconsistent state.
-```
+| Tag | Color | Meaning | Aliases |
+|---|---|---|---|
+| `finding:high` | red | Bugs, security, data loss, broken contracts | `critical`, `bug`, `error` |
+| `finding:medium` | amber | Regressions, perf risks, fragile code, test gaps | `warning`, `risk` |
+| `finding:low` | green | Style, naming, nits, minor suggestions | `nit`, `suggestion` |
+| `finding:info` | blue | FYI observations | `note` |
 
-```finding:medium
-Missing test for the regex change.
-The new pattern in line 42 has no test covering the multi-line case.
-```
+Cards without a `file:`/`line:` field still render — they just don't show Insert / Show-in-diff buttons. Copy is always available.
 
-```finding:low
-Variable name `x` could be clearer.
-Rename to `userCount`.
-```
-````
+---
 
-The UI renders each as a colored card:
+## Movable panel
 
-- **`finding:high`** — red, for bugs / security / data-loss
-- **`finding:medium`** — amber, for regressions / perf / fragility
-- **`finding:low`** — green, for nits / style / suggestions
-- **`finding:info`** — blue, for observations
+The panel has three layout modes, persisted across tabs in `chrome.storage.local`:
 
-Aliases: `critical/bug/error → high`, `warning/risk → medium`, `nit/suggestion → low`, `note → info`.
+| Mode | How to get there | Behavior |
+|---|---|---|
+| **Docked right** (default) | Drag near right edge, or click ➡ | Full-height bar, 420px wide by default, resize via inner edge |
+| **Docked left** | Drag near left edge, or click ⬅ | Same but on the left side |
+| **Floating** | Drag to the middle, or click ⊞ | Window with rounded corners and shadow, can be dragged anywhere within a 16px no-fly zone from viewport edges |
+
+Drag the **⋮⋮ grip** on the far left of the header. Drop within 80px of either edge to snap-dock; drop in open space to float. Width clamps to 300–800px when docked.
 
 ---
 
 ## Repo layout
 
 ```
-gh-claude-panel/
-├── extension/                       Chrome MV3 extension
+pat-before-i-merge/
+├── extension/                       Chrome MV3 extension (workspace)
 │   ├── manifest.config.ts           CRX manifest definition
 │   ├── src/
 │   │   ├── background/              Service worker (toolbar action)
-│   │   ├── content/                 Content script + iframe injection
-│   │   ├── panel/                   React UI (App, ChatStream, Markdown, …)
+│   │   ├── content/inject.ts        Content script — iframe injection, drag, comment-insert, toast
+│   │   ├── panel/                   React UI
+│   │   │   ├── App.tsx              Main panel, system prompt, message routing
+│   │   │   ├── ChatStream.tsx       Message list with streaming animation
+│   │   │   ├── LayoutControls.tsx   Grip + dock/float buttons
+│   │   │   ├── markdown.tsx         Markdown renderer + FindingCard
+│   │   │   ├── ContextChips.tsx     PR metadata chips
+│   │   │   ├── useHostTheme.ts      Theme sync from parent
+│   │   │   ├── usePRContext.ts      Cross-frame PR data hook
+│   │   │   └── styles.css           Primer-aligned tokens, dark mode, animations
+│   │   ├── github/
+│   │   │   ├── selectors.ts         GitHub DOM selectors (single source of truth)
+│   │   │   ├── pr-context.ts        DOM scrape + .diff fallback + /files fallback
+│   │   │   └── review-insert.ts     DOM-driven review-comment insertion & preview
 │   │   ├── transports/              AgentTransport + 3 implementations
-│   │   ├── github/                  DOM scrapers + selectors
 │   │   └── options/                 Settings page (React)
-│   └── public/icons/                Extension icons (PNG + source SVG)
-├── bridge/                          Local Node WebSocket daemon
+│   └── public/icons/                Extension icons + source SVG
+├── bridge/                          Local Node WebSocket daemon (workspace)
 │   ├── src/
 │   │   ├── adapters/                Per-CLI adapters (claude.ts, cursor.ts)
-│   │   ├── server.ts                WebSocket server, token auth
+│   │   ├── server.ts                ws server, token auth, 127.0.0.1 binding
 │   │   └── auth.ts                  First-run token generation
-│   └── bin/gh-claude-bridge.ts      CLI entry point
-├── package.json                     Workspace root
+│   └── bin/pat-bridge.ts            CLI entrypoint
 └── README.md
 ```
 
 ---
 
-## Security notes
+## Security
 
-- **Anthropic API key** is stored in `chrome.storage.local`, scoped to this extension, and sent only to `api.anthropic.com`. It is never sent to the bridge.
+- **API key** is stored in `chrome.storage.local`, scoped to this extension, sent only to `api.anthropic.com`. It never reaches the bridge.
 - **Bridge token** is generated with `crypto.randomBytes(24)` on first run and persisted to `~/.gh-claude-panel/token` mode 0600. The bridge binds to `127.0.0.1` only and rejects non-loopback connections.
-- **Browser-direct API access** uses `anthropic-dangerous-direct-browser-access: true` because the extension calls the Anthropic API from a content-script context. Fine for a personal prototype on your own machine. For multi-user deployment, proxy through a server instead.
-- **Local Claude / Cursor adapters** run with a read-only allow-list by default: `Bash(gh:*), Bash(git:*), Read, Glob, Grep, WebFetch`. Override with `GH_CLAUDE_ALLOWED_TOOLS` env var if you want to widen it.
+- **Diff fetching** uses your existing GitHub session cookies via same-origin content-script fetches — no GitHub OAuth scope or PAT needed.
+- **Review comments** are always staged as drafts via "Start a review" — never auto-submitted. You explicitly click Submit review in GitHub when you're ready.
+- **Local CLI permissions**: the bridge passes a default read-only allowlist (`Bash(gh:*),Bash(git:*),Read,Glob,Grep,WebFetch`) to `claude --print`. Override via `GH_CLAUDE_ALLOWED_TOOLS=...` only with intent.
 
 ---
 
-## Environment variables (bridge)
+## Adding more GitHub Enterprise hosts
 
-| Variable | Default | Purpose |
+Edit two files, then reload the extension:
+
+1. `extension/manifest.config.ts` — add the host to `content_scripts[].matches`, `host_permissions`, and `web_accessible_resources[].matches`.
+2. `extension/src/github/selectors.ts` — add the host to `GITHUB_HOSTS`.
+
+---
+
+## Environment variables
+
+| Var | Default | Effect |
 |---|---|---|
-| `GH_CLAUDE_BRIDGE_PORT` | `7321` | WebSocket port |
-| `GH_CLAUDE_BRIDGE_HOST` | `127.0.0.1` | Bind host. Do not change unless you know what you're doing |
-| `GH_CLAUDE_ALLOWED_TOOLS` | `Bash(gh:*),Bash(git:*),Read,Glob,Grep,WebFetch` | Tools the local Claude CLI may use |
+| `PAT_BRIDGE_PORT` / `GH_CLAUDE_BRIDGE_PORT` | `7321` | WebSocket port the bridge listens on |
+| `PAT_BRIDGE_HOST` / `GH_CLAUDE_BRIDGE_HOST` | `127.0.0.1` | Bind address (loopback only by default) |
+| `GH_CLAUDE_ALLOWED_TOOLS` | `Bash(gh:*),Bash(git:*),Read,Glob,Grep,WebFetch` | Tools the local Claude adapter pre-allows |
 | `GH_CLAUDE_CURSOR_BIN` | `cursor-agent` | Cursor CLI binary name |
-| `GH_CLAUDE_CURSOR_ARGS` | `(empty)` | Extra args passed to Cursor before the prompt |
+| `GH_CLAUDE_CURSOR_ARGS` | *(none)* | Extra args passed to the Cursor CLI |
 
 ---
 
 ## FAQ
 
-**Why does the panel say "0 files" sometimes?**
-The DOM-based diff scraper only finds files on the "Files changed" tab. On Conversation or Commits tabs, the panel falls back to fetching `<pr-url>.diff` with your session cookies. If that 404s (deleted PR, lost session), the chip stays at zero — Claude still answers, just without diff context.
+**Why a side panel instead of using GitHub's built-in Copilot review?** It uses *your* Claude (cloud or local) with *your* context. The same prompt format and finding cards work on personal accounts, GHE, and behind corporate proxies. No special enrollment.
 
-**Why isn't the panel showing up after I install the extension?**
-The content script only auto-injects on *new* page loads. Hard-reload the GitHub tab (Cmd+Shift+R) once after installing.
+**Does it work on private repos?** Yes — the diff fetch uses your existing GitHub session cookies, so anything you can see in the browser, the extension can scrape.
 
-**Does it work on GitHub Enterprise?**
-Yes — `github.intuit.com` and `github.com` are wired up by default. To add another GHE host, edit `extension/manifest.config.ts` (host_permissions, content_scripts, web_accessible_resources) **and** `extension/src/github/selectors.ts` (`GITHUB_HOSTS`).
+**What about non-PR pages?** The panel only attaches PR context on `/pull/N/*` URLs. On other pages it still opens (so you can chat with Claude generally) but the chips show "no PR detected" and no diff is sent.
 
-**Can Claude post comments to GitHub directly?**
-Not yet — v1 is read-only. Copy responses out manually for now. Direct comment-posting via Octokit is on the v2 list.
+**Will it ever post a comment by itself?** No. The Insert action stages a draft via GitHub's "Start a review" path. You explicitly click Submit review to make anything live.
 
-**Why "dangerous direct browser access" — is that bad?**
-The Anthropic API normally expects a server-side proxy. Calling it from the browser exposes your API key to any code running in the panel — fine for a personal extension installed only by you, dangerous if you ever distributed the extension publicly. For team distribution, replace `AnthropicCloudTransport` with a call to your own backend.
-
-**What's not in v1?**
-Issue pages, single-file view, commit pages, posting comments via Octokit, tool-approval round-trip from local Claude, Firefox / Safari, Chrome Web Store publishing.
-
----
-
-## License
-
-MIT. Personal prototype — provided as-is.
+**Does it work with the new `/pull/N/changes` viewer?** Yes — the diff fallback fetches the raw `.diff` endpoint when the new viewer's DOM doesn't match the classic selectors.

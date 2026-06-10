@@ -1,8 +1,8 @@
 {
-  "name": "gh-claude-panel",
+  "name": "pat-before-i-merge",
   "version": "0.1.0",
   "private": true,
-  "description": "GitHub side-panel Chrome extension for Claude and local agents",
+  "description": "Pat Before I Merge — a Chrome side panel for reviewing GitHub PRs with Claude (cloud), local Claude Code, or local Cursor, without leaving the page",
   "workspaces": [
     "extension",
     "bridge"

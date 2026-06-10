@@ -252,7 +252,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
     `**[${SEVERITY_LABELS[finding.severity]}] ${finding.title}**`,
     finding.body,
     "",
-    "_Drafted via gh-claude-panel._",
+    "_Drafted via Pat Before I Merge._",
   ]
     .filter(Boolean)
     .join("\n\n");
