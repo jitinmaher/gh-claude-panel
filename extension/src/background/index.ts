@@ -15,26 +15,27 @@
 
 import { STATIC_HOSTS, loadEnterpriseHosts, isValidHost } from "../github/selectors";
 
-/** URL prefixes derived from the merged host list. Refreshed on storage change. */
-let hostPrefixes: string[] = STATIC_HOSTS.map((h) => `https://${h}/`);
-
-async function refreshHostPrefixes(): Promise<void> {
+/**
+ * Resolve the current GitHub-host prefix list, freshly, from storage.
+ *
+ * Previously this was cached in a module-level variable filled by a
+ * fire-and-forget refreshHostPrefixes() — that races on every SW cold
+ * start. MV3 service workers are short-lived: between two clicks the
+ * SW can shut down and restart, leaving the cache empty long enough
+ * for a click to fall through to "this isn't a GitHub host, open
+ * options instead." Reading from storage on each click is a sub-ms
+ * cost and authoritative.
+ */
+async function getHostPrefixes(): Promise<string[]> {
   const enterprise = await loadEnterpriseHosts();
-  hostPrefixes = [...STATIC_HOSTS, ...enterprise].map((h) => `https://${h}/`);
+  return [...STATIC_HOSTS, ...enterprise].map((h) => `https://${h}/`);
 }
-
-// Initial cache fill — and keep it fresh on changes.
-refreshHostPrefixes();
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.enterpriseHosts) {
-    refreshHostPrefixes();
-  }
-});
 
 /* ─────────────── Toolbar click ─────────────── */
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !tab.url) return;
+  const hostPrefixes = await getHostPrefixes();
   const isGithub = hostPrefixes.some((h) => tab.url!.startsWith(h));
   if (!isGithub) {
     // Off-GitHub click — give users a path into options.
