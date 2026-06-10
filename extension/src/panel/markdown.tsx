@@ -258,8 +258,18 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
   // severity tag so the comment reader knows the level. The "Drafted
   // via" footer links back to the repo and is opt-out via the
   // appendDraftedBy setting.
+  //
+  // Footer uses a raw HTML anchor with target=_blank + rel=noopener so
+  // the link opens in a new tab when clicked. NOTE: GitHub's markdown
+  // sanitizer strips the `target` attribute from <a> tags in user-
+  // submitted content in some surfaces (issues, READMEs); PR review
+  // comments may behave differently. If GitHub strips it, the link
+  // still works — just opens in the same tab — and reviewers can
+  // Cmd/Ctrl-click for a new tab. The italics around it come from
+  // wrapping the anchor in <em>, since asterisks-italic doesn't apply
+  // across raw HTML in GitHub's markdown.
   const footer = appendDraftedBy
-    ? `_Drafted via [Pat Before I Merge](${REPO_URL})._`
+    ? `<em>Drafted via <a href="${REPO_URL}" target="_blank" rel="noopener noreferrer">Pat Before I Merge</a>.</em>`
     : "";
   const commentText = [
     `**[${SEVERITY_LABELS[finding.severity]}] ${finding.title}**`,
