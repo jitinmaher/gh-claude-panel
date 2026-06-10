@@ -7,8 +7,22 @@
  */
 
 /**
- * Hosts we treat as "GitHub". Add more GHE hosts here AND in
- * manifest.config.ts (content_scripts + host_permissions + WAR).
+ * Hosts we treat as "GitHub". This is the canonical list — the background
+ * service worker imports it from here, the PR-URL regex below is built
+ * from it, and the panel reads it for theme sync.
+ *
+ * To support another GHE host (e.g. github.acme.com):
+ *   1. Add the bare hostname here.
+ *   2. Add `https://<host>/*` to manifest.config.ts in three places:
+ *      content_scripts[].matches, host_permissions, and
+ *      web_accessible_resources[].matches.
+ *   3. `npm run build:ext` and reload the extension.
+ *
+ * Chrome MV3 doesn't allow wildcard host_permissions, so each GHE host
+ * must be declared explicitly at install time.
+ *
+ * github.intuit.com ships pre-configured as a working example — replace
+ * or remove as needed.
  */
 export const GITHUB_HOSTS = ["github.com", "github.intuit.com"] as const;
 

@@ -4,7 +4,7 @@
 
 Click the toolbar icon on any pull request, get a streaming review from Claude (cloud), your local `claude` CLI, or a local Cursor agent. The current PR's diff is attached automatically. Findings come back as colored cards with **Insert on line**, **Show in diff**, and **Copy** buttons that stage real review comments on the exact line in GitHub's UI.
 
-Works on **github.com** (classic and the new `/changes` viewer) and **github.intuit.com** (GitHub Enterprise).
+Works on **github.com** (classic and the new `/changes` viewer) and on **GitHub Enterprise** — just add your GHE host to two config files and reload. See [Adding more GitHub hosts](#adding-more-github-hosts).
 
 https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
 
@@ -225,12 +225,24 @@ pat-before-i-merge/
 
 ---
 
-## Adding more GitHub Enterprise hosts
+## Adding more GitHub hosts
 
-Edit two files, then reload the extension:
+The extension ships pre-configured for `github.com`. To use it against any other GHE host (e.g. `github.acme.com`), edit two files, rebuild, and reload:
 
 1. `extension/manifest.config.ts` — add the host to `content_scripts[].matches`, `host_permissions`, and `web_accessible_resources[].matches`.
-2. `extension/src/github/selectors.ts` — add the host to `GITHUB_HOSTS`.
+2. `extension/src/github/selectors.ts` — add the host to the `GITHUB_HOSTS` array.
+
+Then:
+
+```bash
+npm run build:ext
+# chrome://extensions → reload the extension
+# Hard-reload the GHE tab so the new content script attaches
+```
+
+This is a manifest constraint, not a product limitation. Chrome MV3 requires `host_permissions` to be explicit at install time — there's no `https://github.*` wildcard. If you want runtime host management (an "Add an Enterprise host" button in the options page that uses `chrome.permissions.request()`), open an issue.
+
+> One host is pre-configured beyond `github.com` for the extension author's own use. Treat it as an example of where to add your own — replace it or leave it, your call.
 
 ---
 

@@ -2,7 +2,7 @@ import { GITHUB_HOSTS, PR_URL_RE, SELECTORS } from "./selectors";
 
 export interface PRContext {
   url: string;
-  /** Hostname — "github.com" or a GHE host like "github.intuit.com". */
+  /** Hostname — "github.com" or whatever GHE host the page is on. */
   host: string;
   owner: string;
   repo: string;

@@ -1,5 +1,21 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 
+/**
+ * To add another GitHub Enterprise host (e.g. github.acme.com):
+ *
+ *  1. Add it to `content_scripts[].matches`,
+ *     `host_permissions`, and `web_accessible_resources[].matches` below.
+ *  2. Add the bare hostname to `GITHUB_HOSTS` in
+ *     src/github/selectors.ts (the canonical list — background SW
+ *     imports it from there).
+ *  3. `npm run build:ext` and reload the extension.
+ *
+ * Chrome MV3 doesn't allow wildcard host_permissions like
+ * `https://github.*`, so each GHE host must be declared explicitly.
+ *
+ * github.intuit.com is shipped pre-configured as a working example.
+ * Remove it or replace it with your own GHE host as needed.
+ */
 export default defineManifest({
   manifest_version: 3,
   name: "Pat Before I Merge",

@@ -15,7 +15,7 @@ import { useEffect } from "react";
  *   - a `data-host-theme` attribute we can hook CSS off of
  *
  * Cross-origin: panel iframe is loaded from chrome-extension://, parent is
- * github.com / github.intuit.com. Same-origin reads of parent.document fail
+ * github.com (or a GHE host). Same-origin reads of parent.document fail
  * normally, but extensions get an exemption when `host_permissions`
  * covers the parent — which we have.
  */

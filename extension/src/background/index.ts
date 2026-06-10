@@ -9,11 +9,16 @@
  * not here. The SW is short-lived under MV3.
  */
 
-const GITHUB_HOSTS = ["https://github.com/", "https://github.intuit.com/"];
+import { GITHUB_HOSTS } from "../github/selectors";
+
+// Synthesize URL prefixes from the canonical bare-hostname list so we
+// don't duplicate the list (which has bitten us before — adding a GHE
+// host meant remembering to update two files).
+const HOST_PREFIXES = GITHUB_HOSTS.map((h) => `https://${h}/`);
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !tab.url) return;
-  const isGithub = GITHUB_HOSTS.some((h) => tab.url!.startsWith(h));
+  const isGithub = HOST_PREFIXES.some((h) => tab.url!.startsWith(h));
   if (!isGithub) {
     // Open the options page on non-GitHub tabs so users still have a path in.
     chrome.runtime.openOptionsPage();
