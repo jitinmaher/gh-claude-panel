@@ -6,7 +6,10 @@ Click the toolbar icon on any pull request, get a streaming review from Claude (
 
 Works on **github.com** (classic and the new `/changes` viewer) and on **any GitHub Enterprise host** — add hosts at runtime from the options page, no rebuild needed. See [GitHub Enterprise hosts](#github-enterprise-hosts).
 
-https://github.com/user-attachments/assets/ff87f3c6-6fdb-4f98-9ae4-ac235cd0795a
+
+Full demo: https://www.youtube.com/watch?v=16ItfK-tPyY
+
+https://github.com/user-attachments/assets/a697fb4a-24d1-4dbf-8019-1e6b7fa786c0
 
 ---
 
