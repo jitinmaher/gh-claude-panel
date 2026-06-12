@@ -265,3 +265,5 @@ No rebuild, no sideload edits, no Intuit-specific anything baked in. The static 
 **Will it ever post a comment by itself?** No. The Insert action stages a draft via GitHub's "Start a review" path. You explicitly click Submit review to make anything live.
 
 **Does it work with the new `/pull/N/changes` viewer?** Yes — the diff fallback fetches the raw `.diff` endpoint when the new viewer's DOM doesn't match the classic selectors.
+
+<!-- api verify line -->
