@@ -19,7 +19,11 @@
  */
 
 import { extractPRContextWithDiffFetch } from "../github/pr-context";
-import { insertFindingComment, previewFindingLocation } from "../github/review-insert";
+import {
+  DOM_UNAVAILABLE,
+  insertFindingComment,
+  previewFindingLocation,
+} from "../github/review-insert";
 import { DEFAULT_PANEL_LAYOUT, PanelLayout } from "../transports/types";
 
 const PANEL_ID = "gh-claude-panel-root";
@@ -395,19 +399,47 @@ async function handleInsertFinding(req: {
     postInsertResult(req.findingId, false, "no file/line");
     return;
   }
-  const result = await insertFindingComment({
+  const side = req.side ?? "RIGHT";
+
+  // 1. Try DOM insertion (classic Files-changed viewer). When it works
+  //    it stages a native draft comment immediately — the smoothest path.
+  const dom = await insertFindingComment({
     file: req.file,
     line: req.line,
-    side: req.side ?? "RIGHT",
+    side,
     text: req.text,
   });
-  if (result.ok) {
+  if (dom.ok) {
     showToast(`Staged as draft review comment on ${req.file}:${req.line}`);
     postInsertResult(req.findingId, true);
-  } else {
-    await copyToClipboardFallback(req.text, `${result.reason} — copied to clipboard`);
-    postInsertResult(req.findingId, false, result.reason);
+    return;
   }
+
+  // 2. DOM couldn't be driven (new /changes React viewer, etc.). The
+  //    GitHub API has no per-comment append for a pending review, so we
+  //    can't stage one comment at a time via the API. Instead, tell the
+  //    panel to add this finding to its local pending list; the user
+  //    creates the whole draft review in one batch from the panel.
+  if (dom.reason === DOM_UNAVAILABLE) {
+    // Echo the comment data back so the panel can hold it in its pending
+    // list and batch-create the draft review later.
+    const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
+    frame?.contentWindow?.postMessage(
+      {
+        type: "gh-claude-insert-result",
+        findingId: req.findingId,
+        ok: false,
+        stageForDraft: true,
+        comment: { file: req.file, line: req.line, side, body: req.text },
+      },
+      "*",
+    );
+    return;
+  }
+
+  // 3. A genuine failure (not just an unsupported viewer) — clipboard.
+  await copyToClipboardFallback(req.text, `${dom.reason} — copied to clipboard`);
+  postInsertResult(req.findingId, false, dom.reason);
 }
 
 /** Tell the panel iframe whether the insertion succeeded so the finding
@@ -417,11 +449,12 @@ function postInsertResult(
   findingId: string | undefined,
   ok: boolean,
   reason?: string,
+  stageForDraft?: boolean,
 ): void {
   if (!findingId) return;
   const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
   frame?.contentWindow?.postMessage(
-    { type: "gh-claude-insert-result", findingId, ok, reason },
+    { type: "gh-claude-insert-result", findingId, ok, reason, stageForDraft },
     "*",
   );
 }

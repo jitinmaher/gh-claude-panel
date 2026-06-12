@@ -137,6 +137,140 @@ function restErrorHint(status: number, hasToken: boolean): string {
   return `GitHub API error (${status}).`;
 }
 
+/* ─────────────── Create a draft (pending) review ───────────────
+ *
+ * For the new /changes React viewer we can't drive the DOM to open
+ * GitHub's inline comment box. Instead the panel STAGES comments
+ * locally and, when the user clicks "Create draft review", sends them
+ * all here in one batch.
+ *
+ * The GitHub API has no "append a comment to an existing pending
+ * review" endpoint (verified: POST .../reviews/{id}/comments → 404).
+ * The only way to put comments in a PENDING review is to pass them in
+ * the `comments[]` array at review-creation time:
+ *
+ *   POST /repos/{o}/{r}/pulls/{n}/reviews
+ *   { commit_id, comments: [{ path, line, side, body }, ...] }   // no `event` → PENDING
+ *
+ * GitHub allows only ONE pending review per user per PR. If one already
+ * exists, create returns 422; we surface a clear message telling the
+ * user to submit or discard it first.
+ *
+ * Requires a WRITE-scoped token (repo / Pull requests: write). Reuses
+ * the same githubToken setting used for diff fetching.
+ */
+interface CreateDraftReviewMsg {
+  type: "createDraftReview";
+  host: string;
+  owner: string;
+  repo: string;
+  number: number;
+  comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[];
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== "createDraftReview") return false;
+  (async () => {
+    const m = msg as CreateDraftReviewMsg;
+    const apiBase =
+      m.host === "github.com" ? "https://api.github.com" : `https://${m.host}/api/v3`;
+    const repoPath = `${apiBase}/repos/${m.owner}/${m.repo}`;
+
+    const { githubToken } = (await chrome.storage.local.get(["githubToken"])) as {
+      githubToken?: string;
+    };
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+    const init: RequestInit = { headers, credentials: "include" };
+
+    try {
+      // 1. Head commit sha — anchors the comments to the current diff.
+      const prResp = await fetch(`${repoPath}/pulls/${m.number}`, init);
+      if (!prResp.ok) {
+        sendResponse({
+          ok: false,
+          error: postErrorHint(prResp.status, Boolean(githubToken)),
+        });
+        return;
+      }
+      const pr = (await prResp.json()) as { head?: { sha?: string } };
+      const commitId = pr.head?.sha;
+      if (!commitId) {
+        sendResponse({ ok: false, error: "Could not read the PR head commit." });
+        return;
+      }
+
+      // 2. Create the PENDING review with all staged comments at once.
+      const createResp = await fetch(`${repoPath}/pulls/${m.number}/reviews`, {
+        ...init,
+        method: "POST",
+        body: JSON.stringify({
+          commit_id: commitId,
+          comments: m.comments.map((c) => ({
+            path: c.path,
+            line: c.line,
+            side: c.side,
+            body: c.body,
+          })),
+        }),
+      });
+      if (!createResp.ok) {
+        const body = await createResp.text().catch(() => "");
+        sendResponse({
+          ok: false,
+          error: draftReviewErrorHint(createResp.status, Boolean(githubToken), body),
+        });
+        return;
+      }
+      sendResponse({ ok: true });
+    } catch (err) {
+      sendResponse({ ok: false, error: (err as Error).message });
+    }
+  })();
+  return true;
+});
+
+/** Error hint for the draft-review create call. */
+function draftReviewErrorHint(status: number, hasToken: boolean, body: string): string {
+  if (status === 422) {
+    // 422 covers both "pending review already exists" and "a comment's
+    // line isn't in the diff". The message body distinguishes them.
+    if (/pending review/i.test(body)) {
+      return "You already have a pending review on this PR — submit or discard it in GitHub, then try again.";
+    }
+    return "GitHub rejected the review (422) — a comment's line may not be in the diff.";
+  }
+  if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";
+  if (status === 403 || status === 404) {
+    return hasToken
+      ? "Token can't write to this repo — needs Pull requests: write / repo scope."
+      : "Creating a draft review needs a write-scoped GitHub token. Add one in Settings.";
+  }
+  return `GitHub API error (${status}).`;
+}
+
+function postErrorHint(status: number, hasToken: boolean): string {
+  if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";
+  if (status === 403) {
+    return hasToken
+      ? "Token can't write to this repo (403) — needs Pull requests: write / repo scope."
+      : "Posting a comment needs a write-scoped GitHub token. Add one in Settings.";
+  }
+  if (status === 404) {
+    return hasToken
+      ? "Not found (404) — the token may lack write access to this repo."
+      : "Posting needs a write-scoped GitHub token. Add one in Settings.";
+  }
+  if (status === 422) {
+    return "GitHub rejected the comment (422) — the line may not be in the diff.";
+  }
+  return `GitHub API error (${status}).`;
+}
+
 /* ─────────────── Dynamic content-script registration ───────────────
  *
  * The manifest's static `content_scripts` entry covers github.com. For

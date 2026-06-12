@@ -155,14 +155,18 @@ export function OptionsPage() {
             onChange={(e) => update("githubToken", e.target.value)}
           />
           <div className="hint">
-            Required for diff-fetching on <strong>private repositories</strong>{" "}
-            and to lift the 60-req/hr unauthenticated rate limit on public
-            repos. The token is sent only to{" "}
+            Used for two things: <strong>fetching the diff</strong> on private
+            repos / past the 60-req/hr public rate limit (needs read access),
+            and <strong>inserting review comments</strong> on GitHub's new diff
+            viewer (needs write access). The token is sent only to{" "}
             <code>api.github.com</code> (or your GHE host's{" "}
             <code>/api/v3</code>). Create one at{" "}
-            <code>github.com/settings/tokens</code> with{" "}
-            <code>repo</code> read scope (classic) or read access to{" "}
-            <code>Pull requests</code> (fine-grained).
+            <code>github.com/settings/tokens</code> with the{" "}
+            <code>repo</code> scope (classic) — or, for a fine-grained token,
+            <strong> read+write</strong> access to{" "}
+            <code>Pull requests</code> and read access to{" "}
+            <code>Contents</code>. Read-only is enough if you only review and
+            don't use Insert.
           </div>
         </div>
       </section>

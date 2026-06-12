@@ -31,6 +31,14 @@ export type InsertResult =
   | { ok: true }
   | { ok: false; reason: string };
 
+/**
+ * A signal value the DOM inserter returns when the page DOM can't be
+ * driven at all (the new /changes React viewer, or the file/line wasn't
+ * found in the rendered diff). The caller should try the REST API path
+ * instead of treating it as a hard failure.
+ */
+export const DOM_UNAVAILABLE = "dom-unavailable";
+
 export interface PreviewRequest {
   file: string;
   line: number;
@@ -113,25 +121,19 @@ export async function insertFindingComment(req: InsertRequest): Promise<InsertRe
   // 1. Make sure we're on a diff view (Files changed or Changes).
   if (!DIFF_VIEW_RE.test(location.pathname)) {
     const navigated = await navigateToDiffView();
-    if (!navigated) {
-      return { ok: false, reason: "open the Files changed tab, then try again" };
-    }
+    // Not on a diff view and couldn't switch — let the caller try the API.
+    if (!navigated) return { ok: false, reason: DOM_UNAVAILABLE };
   }
 
-  // 2. Locate the file's diff container.
+  // 2. Locate the file's diff container. If the rendered DOM doesn't
+  //    expose it (e.g. the new /changes React viewer), signal the caller
+  //    to fall back to the REST API rather than failing outright.
   const fileContainer = await waitFor(() => findFileContainer(req.file), 4000);
-  if (!fileContainer) {
-    return { ok: false, reason: notFoundReason(`file ${req.file} not found in the diff`) };
-  }
+  if (!fileContainer) return { ok: false, reason: DOM_UNAVAILABLE };
 
   // 3. Find the target line's <td class="blob-num">.
   const numCell = findLineNumCell(fileContainer, req.line, req.side);
-  if (!numCell) {
-    return {
-      ok: false,
-      reason: notFoundReason(`line ${req.line} not found for ${req.file}`),
-    };
-  }
+  if (!numCell) return { ok: false, reason: DOM_UNAVAILABLE };
 
   // 4. Scroll into view so GitHub's hover handlers attach (some
   //    builds gate the + button on visibility).
@@ -140,7 +142,7 @@ export async function insertFindingComment(req: InsertRequest): Promise<InsertRe
 
   // 5. Click the + button.
   const addBtn = findAddCommentButton(numCell);
-  if (!addBtn) return { ok: false, reason: "could not find the + button on that line" };
+  if (!addBtn) return { ok: false, reason: DOM_UNAVAILABLE };
   addBtn.click();
 
   // 6. Wait for the inline comment form's textarea to mount.
