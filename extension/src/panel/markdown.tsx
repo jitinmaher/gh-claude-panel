@@ -358,7 +358,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
         {canInsert && isInserted && (
           <span
             className="md-finding-inserted"
-            title="Staged for the Request-changes review. Click 'Request changes' at the bottom to submit."
+            title="Posted as a review comment on this line."
           >
             <svg
               width="12"
@@ -372,7 +372,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
                 d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"
               />
             </svg>
-            Staged on line {finding.line}
+            Posted on line {finding.line}
           </span>
         )}
         {canInsert && !isInserted && (
@@ -380,7 +380,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
             type="button"
             className="md-finding-btn md-finding-btn-primary"
             onClick={onInsert}
-            title="Stage this as an inline comment for a Request-changes review"
+            title="Post this as a review comment on the exact line (published immediately)"
           >
             Insert on line {finding.line}
           </button>
@@ -393,6 +393,16 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
             title="Scroll to and highlight this line in the diff"
           >
             Show in diff
+          </button>
+        )}
+        {canInsert && isInserted && (
+          <button
+            type="button"
+            className="md-finding-btn"
+            onClick={onInsert}
+            title="Post this comment again"
+          >
+            Post again
           </button>
         )}
         <button

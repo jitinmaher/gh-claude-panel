@@ -384,10 +384,9 @@ function showToast(text: string) {
 }
 
 /**
- * Insert no longer posts immediately. It stages the finding in the
- * panel's pending list; the user submits them all as one "Request
- * changes" review (handled in App.tsx → background submitReview). This
- * handler just validates and echoes the comment data back to the panel.
+ * Each Insert posts a single inline comment on the line immediately via
+ * the REST API (background → postLiveComment). Per-click, standalone, no
+ * batch. Works on every viewer and on the user's own PRs.
  */
 async function handleInsertFinding(req: {
   findingId?: string;
@@ -402,19 +401,42 @@ async function handleInsertFinding(req: {
     return;
   }
   const side = req.side ?? "RIGHT";
-  const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
-  frame?.contentWindow?.postMessage(
-    {
-      type: "gh-claude-insert-result",
-      findingId: req.findingId,
-      ok: false,
-      stageForReview: true,
-      comment: { file: req.file, line: req.line, side, body: req.text },
-    },
-    "*",
-  );
-  // Best-effort: scroll the diff to the line so the user sees what they staged.
-  void previewFindingLocation({ file: req.file, line: req.line, side });
+
+  const parsed = parsePRUrl();
+  if (!parsed) {
+    await copyToClipboardFallback(req.text, "not on a PR page — copied to clipboard");
+    postInsertResult(req.findingId, false, "not on a PR page");
+    return;
+  }
+
+  let resp: { ok: boolean; error?: string; htmlUrl?: string } | undefined;
+  try {
+    resp = await chrome.runtime.sendMessage({
+      type: "postLiveComment",
+      host: parsed.host,
+      owner: parsed.owner,
+      repo: parsed.repo,
+      number: parsed.number,
+      path: req.file,
+      line: req.line,
+      side,
+      body: req.text,
+    });
+  } catch (err) {
+    resp = { ok: false, error: (err as Error).message };
+  }
+
+  if (resp?.ok) {
+    showToast(`Comment posted on ${req.file}:${req.line} — reload the PR to see it`);
+    postInsertResult(req.findingId, true);
+    // Best-effort: scroll the diff to the line so the user sees where it landed.
+    void previewFindingLocation({ file: req.file, line: req.line, side });
+    return;
+  }
+
+  const reason = resp?.error ?? "couldn't post the comment";
+  await copyToClipboardFallback(req.text, `${reason} — copied to clipboard`);
+  postInsertResult(req.findingId, false, reason);
 }
 
 /** Tell the panel iframe whether the insertion succeeded so the finding
