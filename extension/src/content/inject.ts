@@ -383,6 +383,12 @@ function showToast(text: string) {
   }, 2400);
 }
 
+/**
+ * Insert no longer posts immediately. It stages the finding in the
+ * panel's pending list; the user submits them all as one "Request
+ * changes" review (handled in App.tsx → background submitReview). This
+ * handler just validates and echoes the comment data back to the panel.
+ */
 async function handleInsertFinding(req: {
   findingId?: string;
   file?: string;
@@ -396,46 +402,19 @@ async function handleInsertFinding(req: {
     return;
   }
   const side = req.side ?? "RIGHT";
-
-  const parsed = parsePRUrl();
-  if (!parsed) {
-    await copyToClipboardFallback(req.text, "not on a PR page — copied to clipboard");
-    postInsertResult(req.findingId, false, "not on a PR page");
-    return;
-  }
-
-  // Post the comment live, on the exact line, via the REST API. Works
-  // on every viewer (classic /files and the new React /changes) because
-  // it doesn't touch the page DOM. Published immediately.
-  let resp: { ok: boolean; error?: string; htmlUrl?: string } | undefined;
-  try {
-    resp = await chrome.runtime.sendMessage({
-      type: "postLiveComment",
-      host: parsed.host,
-      owner: parsed.owner,
-      repo: parsed.repo,
-      number: parsed.number,
-      path: req.file,
-      line: req.line,
-      side,
-      body: req.text,
-    });
-  } catch (err) {
-    resp = { ok: false, error: (err as Error).message };
-  }
-
-  if (resp?.ok) {
-    showToast(`Comment posted on ${req.file}:${req.line}`);
-    postInsertResult(req.findingId, true);
-    // Best-effort: scroll the diff to the line so the user sees it land.
-    void previewFindingLocation({ file: req.file, line: req.line, side });
-    return;
-  }
-
-  // Failed — copy to clipboard with the reason so the user can post manually.
-  const reason = resp?.error ?? "couldn't post the comment";
-  await copyToClipboardFallback(req.text, `${reason} — copied to clipboard`);
-  postInsertResult(req.findingId, false, reason);
+  const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
+  frame?.contentWindow?.postMessage(
+    {
+      type: "gh-claude-insert-result",
+      findingId: req.findingId,
+      ok: false,
+      stageForReview: true,
+      comment: { file: req.file, line: req.line, side, body: req.text },
+    },
+    "*",
+  );
+  // Best-effort: scroll the diff to the line so the user sees what they staged.
+  void previewFindingLocation({ file: req.file, line: req.line, side });
 }
 
 /** Tell the panel iframe whether the insertion succeeded so the finding

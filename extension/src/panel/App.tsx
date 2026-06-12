@@ -42,6 +42,15 @@ export default function App() {
   const [insertedFindings, setInsertedFindings] = useState<Set<string>>(
     () => new Set(),
   );
+  /**
+   * Findings staged for a "Request changes" review. Each Insert adds one
+   * here; the "Request changes (N)" button submits them all as a single
+   * live review. Keyed by findingId. Cleared after a successful submit.
+   */
+  const [pendingReview, setPendingReview] = useState<
+    Map<string, { file: string; line: number; side: "LEFT" | "RIGHT"; body: string }>
+  >(() => new Map());
+  const [reviewBusy, setReviewBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const prCtx = usePRContext();
 
@@ -58,9 +67,26 @@ export default function App() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type !== "gh-claude-insert-result") return;
-      const { ok, findingId: id } = e.data as { ok: boolean; findingId?: string };
+      const { ok, findingId: id, stageForReview, comment } = e.data as {
+        ok: boolean;
+        findingId?: string;
+        stageForReview?: boolean;
+        comment?: { file: string; line: number; side: "LEFT" | "RIGHT"; body: string };
+      };
       if (typeof id !== "string") return;
-      if (ok) {
+      if (stageForReview && comment) {
+        setPendingReview((prev) => {
+          const next = new Map(prev);
+          next.set(id, comment);
+          return next;
+        });
+        setInsertedFindings((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      } else if (ok) {
         setInsertedFindings((prev) => {
           if (prev.has(id)) return prev;
           const next = new Set(prev);
@@ -82,6 +108,36 @@ export default function App() {
     setSettings((prev) => (prev ? { ...prev, anthropicModel: modelId } : prev));
     saveSettings({ anthropicModel: modelId });
   }, []);
+
+  // Submit all staged comments as one live "Request changes" review.
+  const submitReview = useCallback(async () => {
+    if (!prCtx || pendingReview.size === 0 || reviewBusy) return;
+    setReviewBusy(true);
+    try {
+      const comments = [...pendingReview.values()];
+      const resp = (await chrome.runtime.sendMessage({
+        type: "submitReview",
+        host: prCtx.host,
+        owner: prCtx.owner,
+        repo: prCtx.repo,
+        number: prCtx.number,
+        event: "REQUEST_CHANGES",
+        comments,
+      })) as { ok: boolean; error?: string } | undefined;
+      const toast = (text: string) =>
+        window.parent.postMessage({ type: "gh-claude-toast", text }, "*");
+      if (resp?.ok) {
+        toast(
+          `Requested changes with ${comments.length} comment${comments.length === 1 ? "" : "s"} — reload the PR to see it`,
+        );
+        setPendingReview(new Map());
+      } else {
+        toast(resp?.error ?? "Could not submit the review");
+      }
+    } finally {
+      setReviewBusy(false);
+    }
+  }, [prCtx, pendingReview, reviewBusy]);
 
   const send = useCallback(
     async (text: string) => {
@@ -219,6 +275,21 @@ export default function App() {
           <EmptyState prCtx={prCtx} onPick={send} />
         ) : (
           <ChatStream messages={messages} />
+        )}
+        {pendingReview.size > 0 && (
+          <div className="draft-bar">
+            <span className="draft-bar-count">
+              {pendingReview.size} comment{pendingReview.size === 1 ? "" : "s"} staged
+            </span>
+            <button
+              className="btn draft-bar-btn"
+              onClick={submitReview}
+              disabled={reviewBusy}
+              title="Submit all staged comments as one 'Request changes' review on the PR"
+            >
+              {reviewBusy ? "Submitting…" : "Request changes"}
+            </button>
+          </div>
         )}
         <Composer
           busy={busy}

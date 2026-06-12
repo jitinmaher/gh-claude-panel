@@ -137,38 +137,40 @@ function restErrorHint(status: number, hasToken: boolean): string {
   return `GitHub API error (${status}).`;
 }
 
-/* ─────────────── Post a live review comment ───────────────
+/* ─────────────── Submit a review (Request changes) ───────────────
  *
- * Posts a single review comment on the exact line, published
- * immediately:
+ * The panel accumulates inline comments locally, then submits them as a
+ * single REVIEW in one call, published live:
  *
- *   POST /repos/{o}/{r}/pulls/{n}/comments
- *   { body, commit_id, path, line, side }
+ *   POST /repos/{o}/{r}/pulls/{n}/reviews
+ *   { event: "REQUEST_CHANGES", commit_id, body, comments: [{path,line,side,body}, ...] }
  *
- * This is the path used for the new /changes React viewer (which can't
- * be DOM-driven) — but it's now used for every viewer so Insert behaves
- * identically everywhere: one click, one live comment.
+ * Batching into one review (rather than N standalone comments or N
+ * reviews) keeps the PR timeline clean: one "requested changes" review
+ * with all the inline findings attached. `event: REQUEST_CHANGES`
+ * submits it immediately (no pending/draft step).
  *
- * Requires a WRITE-scoped token (repo / Pull requests: write). Reuses
- * the same githubToken setting used for diff fetching. commit_id is the
- * PR head sha, fetched here.
+ * Requires a WRITE-scoped token. commit_id is the PR head sha.
+ *
+ * Note: GitHub doesn't let you request changes on YOUR OWN PR — that
+ * returns 422 ("Can not request changes on your own pull request").
+ * We surface that clearly.
  */
-interface PostLiveCommentMsg {
-  type: "postLiveComment";
+interface SubmitReviewMsg {
+  type: "submitReview";
   host: string;
   owner: string;
   repo: string;
   number: number;
-  path: string;
-  line: number;
-  side: "LEFT" | "RIGHT";
-  body: string;
+  event: "REQUEST_CHANGES" | "COMMENT";
+  body?: string;
+  comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[];
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== "postLiveComment") return false;
+  if (msg?.type !== "submitReview") return false;
   (async () => {
-    const m = msg as PostLiveCommentMsg;
+    const m = msg as SubmitReviewMsg;
     const apiBase =
       m.host === "github.com" ? "https://api.github.com" : `https://${m.host}/api/v3`;
     const repoPath = `${apiBase}/repos/${m.owner}/${m.repo}`;
@@ -185,7 +187,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const init: RequestInit = { headers, credentials: "include" };
 
     try {
-      // 1. Head commit sha — anchors the comment to the current diff.
+      // 1. Head commit sha — anchors the comments to the current diff.
       const prResp = await fetch(`${repoPath}/pulls/${m.number}`, init);
       if (!prResp.ok) {
         sendResponse({ ok: false, error: postErrorHint(prResp.status, Boolean(githubToken)) });
@@ -198,23 +200,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
 
-      // 2. Post the live comment.
-      const resp = await fetch(`${repoPath}/pulls/${m.number}/comments`, {
+      // 2. Submit the review with all comments, live.
+      const resp = await fetch(`${repoPath}/pulls/${m.number}/reviews`, {
         ...init,
         method: "POST",
         body: JSON.stringify({
-          body: m.body,
+          event: m.event,
           commit_id: commitId,
-          path: m.path,
-          line: m.line,
-          side: m.side,
+          body: m.body || undefined,
+          comments: m.comments.map((c) => ({
+            path: c.path,
+            line: c.line,
+            side: c.side,
+            body: c.body,
+          })),
         }),
       });
       if (!resp.ok) {
-        sendResponse({ ok: false, error: postErrorHint(resp.status, Boolean(githubToken)) });
+        const text = await resp.text().catch(() => "");
+        sendResponse({ ok: false, error: submitReviewErrorHint(resp.status, Boolean(githubToken), text) });
         return;
       }
-      // The created comment's html_url lets the panel link straight to it.
       const created = (await resp.json().catch(() => ({}))) as { html_url?: string };
       sendResponse({ ok: true, htmlUrl: created.html_url });
     } catch (err) {
@@ -238,6 +244,26 @@ function postErrorHint(status: number, hasToken: boolean): string {
   }
   if (status === 422) {
     return "GitHub rejected the comment (422) — the line may not be in the diff.";
+  }
+  return `GitHub API error (${status}).`;
+}
+
+/** Error hint for submitting a review. Distinguishes the common 422s. */
+function submitReviewErrorHint(status: number, hasToken: boolean, body: string): string {
+  if (status === 422) {
+    if (/own pull request/i.test(body)) {
+      return "GitHub won't let you request changes on your own PR. Switch to Comment mode in Settings, or review someone else's PR.";
+    }
+    if (/line must be part of the diff|not part of the diff/i.test(body)) {
+      return "A comment's line isn't part of the diff (422). The diff may have moved since the review was generated.";
+    }
+    return "GitHub rejected the review (422) — a line may not be in the diff.";
+  }
+  if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";
+  if (status === 403 || status === 404) {
+    return hasToken
+      ? "Token can't write to this repo — needs Pull requests: write / repo scope."
+      : "Submitting a review needs a write-scoped GitHub token. Add one in Settings.";
   }
   return `GitHub API error (${status}).`;
 }

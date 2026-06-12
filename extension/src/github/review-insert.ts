@@ -3,7 +3,7 @@
  * in GitHub's rendered diff.
  *
  * Comment *posting* is no longer done via the DOM; it goes through the
- * REST API (see background/index.ts → postLiveComment). This module is
+ * REST API (see background/index.ts → submitReview). This module is
  * now read-only: it locates a line in the page and flashes it.
  *
  * GitHub's classic diff DOM (Files changed tab):
