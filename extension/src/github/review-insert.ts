@@ -1,12 +1,20 @@
 /**
- * DOM helpers for "Show in diff" — scrolling to and highlighting a line
- * in GitHub's rendered diff.
+ * DOM interaction with GitHub's classic diff viewer:
+ *   - "Show in diff": scroll to + flash a line.
+ *   - "Insert": drive GitHub's own inline comment box to post a comment,
+ *     so GitHub re-renders it in place (no page refresh needed).
  *
- * Comment *posting* is no longer done via the DOM; it goes through the
- * REST API (see background/index.ts → submitReview). This module is
- * now read-only: it locates a line in the page and flashes it.
+ * Driving GitHub's UI (rather than the REST API) is the ONLY way to get
+ * a comment to appear live without reloading — because GitHub itself
+ * does the posting and updates its own React state. The REST API writes
+ * server-side but the SPA never learns about it until a reload.
  *
- * GitHub's classic diff DOM (Files changed tab):
+ * The catch: this only works on the classic "/files" table viewer. The
+ * new "/changes" React viewer doesn't expose the + button / textarea we
+ * drive, so insertViaDom() returns DOM_UNAVAILABLE there and the caller
+ * falls back to the API.
+ *
+ * Classic diff DOM:
  *   <tr class="diff-table">
  *     <td data-line-number="42" data-side="RIGHT" class="blob-num">42</td>
  *     <td class="blob-code blob-code-addition">…code…</td>
@@ -25,6 +33,130 @@ export interface PreviewRequest {
 export type PreviewResult =
   | { ok: true }
   | { ok: false; reason: string };
+
+export interface InsertRequest {
+  file: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  text: string;
+}
+
+/** insertViaDom outcome. DOM_UNAVAILABLE means "fall back to the API". */
+export type InsertDomResult =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+export const DOM_UNAVAILABLE = "dom-unavailable";
+
+/**
+ * Post a comment by driving GitHub's own inline comment box on the
+ * classic /files viewer: find the line, click the + button, fill the
+ * textarea, click "Add single comment" (posts live, GitHub re-renders
+ * in place). Returns DOM_UNAVAILABLE if the page can't be driven (new
+ * viewer, line not found, buttons missing) so the caller uses the API.
+ */
+export async function insertViaDom(req: InsertRequest): Promise<InsertDomResult> {
+  if (!DIFF_VIEW_RE.test(location.pathname)) {
+    const navigated = await navigateToDiffView();
+    if (!navigated) return { ok: false, reason: DOM_UNAVAILABLE };
+  }
+
+  const fileContainer = await waitFor(() => findFileContainer(req.file), 3000);
+  if (!fileContainer) return { ok: false, reason: DOM_UNAVAILABLE };
+
+  const numCell = findLineNumCell(fileContainer, req.line, req.side);
+  if (!numCell) return { ok: false, reason: DOM_UNAVAILABLE };
+
+  // Scroll into view so GitHub's hover handlers attach (some builds gate
+  // the + button on visibility), then click the +.
+  numCell.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+  await sleep(150);
+  const addBtn = findAddCommentButton(numCell);
+  if (!addBtn) return { ok: false, reason: DOM_UNAVAILABLE };
+  addBtn.click();
+
+  const textarea = await waitFor(() => findOpenCommentTextarea(numCell.closest("tr")), 3000);
+  if (!textarea) return { ok: false, reason: DOM_UNAVAILABLE };
+
+  setReactInputValue(textarea, req.text);
+  await sleep(50);
+
+  // "Add single comment" posts the comment live (not "Start a review",
+  // which would stage a draft). GitHub re-renders the thread in place.
+  const submitBtn = findAddSingleCommentButton(textarea);
+  if (!submitBtn) {
+    return {
+      ok: false,
+      reason: "comment text was filled in, but the 'Add single comment' button wasn't found — submit it manually",
+    };
+  }
+  submitBtn.click();
+  return { ok: true };
+}
+
+function findAddCommentButton(numCell: HTMLTableCellElement): HTMLElement | null {
+  const candidates = [
+    "button.add-line-comment",
+    'button[aria-label*="comment"i]',
+    'button[data-original-title*="comment"i]',
+    "a.add-line-comment",
+  ];
+  for (const sel of candidates) {
+    const btn = numCell.querySelector<HTMLElement>(sel);
+    if (btn) return btn;
+  }
+  const row = numCell.closest("tr");
+  if (row) {
+    for (const sel of candidates) {
+      const btn = row.querySelector<HTMLElement>(sel);
+      if (btn) return btn;
+    }
+  }
+  return null;
+}
+
+function findOpenCommentTextarea(row: Element | null): HTMLTextAreaElement | null {
+  if (!row) return null;
+  // After clicking +, GitHub inserts the inline form after the row.
+  let probe: Element | null = row.nextElementSibling;
+  for (let i = 0; i < 6 && probe; i++) {
+    const ta = probe.querySelector<HTMLTextAreaElement>(
+      'textarea[name="comment[body]"], textarea[name="pull_request_review[body]"], textarea.js-comment-field',
+    );
+    if (ta) return ta;
+    probe = probe.nextElementSibling;
+  }
+  return null;
+}
+
+/**
+ * Find the "Add single comment" submit button — the one that posts the
+ * comment live, as opposed to "Start a review" (which stages a draft).
+ * Prefer the single-comment button; never click Start-a-review here.
+ */
+function findAddSingleCommentButton(textarea: HTMLTextAreaElement): HTMLButtonElement | null {
+  const form = textarea.closest("form");
+  if (!form) return null;
+  const buttons = form.querySelectorAll<HTMLButtonElement>("button");
+  for (const b of Array.from(buttons)) {
+    const txt = (b.textContent ?? "").trim().toLowerCase();
+    if (txt.includes("add single comment") || txt === "comment") return b;
+  }
+  return null;
+}
+
+/**
+ * React-controlled inputs ignore raw value assignment. Use the native
+ * setter + input/change events so GitHub's form state updates.
+ */
+function setReactInputValue(el: HTMLTextAreaElement, value: string): void {
+  const proto = Object.getPrototypeOf(el);
+  const desc = Object.getOwnPropertyDescriptor(proto, "value");
+  if (desc?.set) desc.set.call(el, value);
+  else el.value = value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
 
 /**
  * Scroll the matching diff row into view and flash a highlight on it.

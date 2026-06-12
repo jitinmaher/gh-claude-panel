@@ -19,7 +19,11 @@
  */
 
 import { extractPRContextWithDiffFetch, parsePRUrl } from "../github/pr-context";
-import { previewFindingLocation } from "../github/review-insert";
+import {
+  DOM_UNAVAILABLE,
+  insertViaDom,
+  previewFindingLocation,
+} from "../github/review-insert";
 import { DEFAULT_PANEL_LAYOUT, PanelLayout } from "../transports/types";
 
 const PANEL_ID = "gh-claude-panel-root";
@@ -384,9 +388,14 @@ function showToast(text: string) {
 }
 
 /**
- * Each Insert posts a single inline comment on the line immediately via
- * the REST API (background → postLiveComment). Per-click, standalone, no
- * batch. Works on every viewer and on the user's own PRs.
+ * Insert posts a single inline comment on the line. Two paths:
+ *
+ *   1. Drive GitHub's own UI on the classic /files viewer (click +,
+ *      fill, "Add single comment"). GitHub re-renders the comment in
+ *      place — appears LIVE, no page refresh.
+ *   2. If the DOM can't be driven (new /changes viewer), fall back to
+ *      the REST API and soft-refresh the diff so the comment shows up
+ *      without a full reload.
  */
 async function handleInsertFinding(req: {
   findingId?: string;
@@ -409,7 +418,23 @@ async function handleInsertFinding(req: {
     return;
   }
 
-  let resp: { ok: boolean; error?: string; htmlUrl?: string } | undefined;
+  // 1. Try GitHub's own UI — the only way the comment renders live.
+  const dom = await insertViaDom({ file: req.file, line: req.line, side, text: req.text });
+  if (dom.ok) {
+    showToast(`Comment posted on ${req.file}:${req.line}`);
+    postInsertResult(req.findingId, true);
+    return;
+  }
+  // A real DOM failure (form found but submit button missing) — surface it.
+  if (dom.reason !== DOM_UNAVAILABLE) {
+    await copyToClipboardFallback(req.text, `${dom.reason} — copied to clipboard`);
+    postInsertResult(req.findingId, false, dom.reason);
+    return;
+  }
+
+  // 2. DOM unavailable (new /changes viewer) — post via REST API, then
+  //    soft-refresh the diff so the comment appears without a full reload.
+  let resp: { ok: boolean; error?: string } | undefined;
   try {
     resp = await chrome.runtime.sendMessage({
       type: "postLiveComment",
@@ -427,16 +452,29 @@ async function handleInsertFinding(req: {
   }
 
   if (resp?.ok) {
-    showToast(`Comment posted on ${req.file}:${req.line} — reload the PR to see it`);
+    showToast(`Comment posted on ${req.file}:${req.line}`);
     postInsertResult(req.findingId, true);
-    // Best-effort: scroll the diff to the line so the user sees where it landed.
-    void previewFindingLocation({ file: req.file, line: req.line, side });
+    void softRefreshDiff();
     return;
   }
 
   const reason = resp?.error ?? "couldn't post the comment";
   await copyToClipboardFallback(req.text, `${reason} — copied to clipboard`);
   postInsertResult(req.findingId, false, reason);
+}
+
+/**
+ * Re-fetch the diff in-page (no full reload, panel survives) so an
+ * API-posted comment shows up. GitHub's React router refetches when its
+ * own tab link is clicked; we click whichever diff tab is current.
+ */
+async function softRefreshDiff(): Promise<void> {
+  const tab = document.querySelector<HTMLAnchorElement>(
+    'a[href$="/changes"], a[href$="/files"], a[data-tab-item="files_bucket"], a#files_tab',
+  );
+  // Clicking the already-active tab re-triggers GitHub's data fetch in
+  // most builds. Harmless if it doesn't.
+  tab?.click();
 }
 
 /** Tell the panel iframe whether the insertion succeeded so the finding
