@@ -137,41 +137,38 @@ function restErrorHint(status: number, hasToken: boolean): string {
   return `GitHub API error (${status}).`;
 }
 
-/* ─────────────── Create a draft (pending) review ───────────────
+/* ─────────────── Post a live review comment ───────────────
  *
- * For the new /changes React viewer we can't drive the DOM to open
- * GitHub's inline comment box. Instead the panel STAGES comments
- * locally and, when the user clicks "Create draft review", sends them
- * all here in one batch.
+ * Posts a single review comment on the exact line, published
+ * immediately:
  *
- * The GitHub API has no "append a comment to an existing pending
- * review" endpoint (verified: POST .../reviews/{id}/comments → 404).
- * The only way to put comments in a PENDING review is to pass them in
- * the `comments[]` array at review-creation time:
+ *   POST /repos/{o}/{r}/pulls/{n}/comments
+ *   { body, commit_id, path, line, side }
  *
- *   POST /repos/{o}/{r}/pulls/{n}/reviews
- *   { commit_id, comments: [{ path, line, side, body }, ...] }   // no `event` → PENDING
- *
- * GitHub allows only ONE pending review per user per PR. If one already
- * exists, create returns 422; we surface a clear message telling the
- * user to submit or discard it first.
+ * This is the path used for the new /changes React viewer (which can't
+ * be DOM-driven) — but it's now used for every viewer so Insert behaves
+ * identically everywhere: one click, one live comment.
  *
  * Requires a WRITE-scoped token (repo / Pull requests: write). Reuses
- * the same githubToken setting used for diff fetching.
+ * the same githubToken setting used for diff fetching. commit_id is the
+ * PR head sha, fetched here.
  */
-interface CreateDraftReviewMsg {
-  type: "createDraftReview";
+interface PostLiveCommentMsg {
+  type: "postLiveComment";
   host: string;
   owner: string;
   repo: string;
   number: number;
-  comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[];
+  path: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  body: string;
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== "createDraftReview") return false;
+  if (msg?.type !== "postLiveComment") return false;
   (async () => {
-    const m = msg as CreateDraftReviewMsg;
+    const m = msg as PostLiveCommentMsg;
     const apiBase =
       m.host === "github.com" ? "https://api.github.com" : `https://${m.host}/api/v3`;
     const repoPath = `${apiBase}/repos/${m.owner}/${m.repo}`;
@@ -188,13 +185,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const init: RequestInit = { headers, credentials: "include" };
 
     try {
-      // 1. Head commit sha — anchors the comments to the current diff.
+      // 1. Head commit sha — anchors the comment to the current diff.
       const prResp = await fetch(`${repoPath}/pulls/${m.number}`, init);
       if (!prResp.ok) {
-        sendResponse({
-          ok: false,
-          error: postErrorHint(prResp.status, Boolean(githubToken)),
-        });
+        sendResponse({ ok: false, error: postErrorHint(prResp.status, Boolean(githubToken)) });
         return;
       }
       const pr = (await prResp.json()) as { head?: { sha?: string } };
@@ -204,54 +198,31 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
 
-      // 2. Create the PENDING review with all staged comments at once.
-      const createResp = await fetch(`${repoPath}/pulls/${m.number}/reviews`, {
+      // 2. Post the live comment.
+      const resp = await fetch(`${repoPath}/pulls/${m.number}/comments`, {
         ...init,
         method: "POST",
         body: JSON.stringify({
+          body: m.body,
           commit_id: commitId,
-          comments: m.comments.map((c) => ({
-            path: c.path,
-            line: c.line,
-            side: c.side,
-            body: c.body,
-          })),
+          path: m.path,
+          line: m.line,
+          side: m.side,
         }),
       });
-      if (!createResp.ok) {
-        const body = await createResp.text().catch(() => "");
-        sendResponse({
-          ok: false,
-          error: draftReviewErrorHint(createResp.status, Boolean(githubToken), body),
-        });
+      if (!resp.ok) {
+        sendResponse({ ok: false, error: postErrorHint(resp.status, Boolean(githubToken)) });
         return;
       }
-      sendResponse({ ok: true });
+      // The created comment's html_url lets the panel link straight to it.
+      const created = (await resp.json().catch(() => ({}))) as { html_url?: string };
+      sendResponse({ ok: true, htmlUrl: created.html_url });
     } catch (err) {
       sendResponse({ ok: false, error: (err as Error).message });
     }
   })();
   return true;
 });
-
-/** Error hint for the draft-review create call. */
-function draftReviewErrorHint(status: number, hasToken: boolean, body: string): string {
-  if (status === 422) {
-    // 422 covers both "pending review already exists" and "a comment's
-    // line isn't in the diff". The message body distinguishes them.
-    if (/pending review/i.test(body)) {
-      return "You already have a pending review on this PR — submit or discard it in GitHub, then try again.";
-    }
-    return "GitHub rejected the review (422) — a comment's line may not be in the diff.";
-  }
-  if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";
-  if (status === 403 || status === 404) {
-    return hasToken
-      ? "Token can't write to this repo — needs Pull requests: write / repo scope."
-      : "Creating a draft review needs a write-scoped GitHub token. Add one in Settings.";
-  }
-  return `GitHub API error (${status}).`;
-}
 
 function postErrorHint(status: number, hasToken: boolean): string {
   if (status === 401) return "GitHub rejected the token (401). Check it in Settings.";

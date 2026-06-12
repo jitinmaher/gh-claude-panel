@@ -358,7 +358,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
         {canInsert && isInserted && (
           <span
             className="md-finding-inserted"
-            title="This finding was staged as a draft review comment. Submit the review in GitHub when you're ready."
+            title="Posted as a review comment on this line."
           >
             <svg
               width="12"
@@ -372,7 +372,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
                 d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"
               />
             </svg>
-            Inserted on line {finding.line}
+            Posted on line {finding.line}
           </span>
         )}
         {canInsert && !isInserted && (
@@ -380,7 +380,7 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
             type="button"
             className="md-finding-btn md-finding-btn-primary"
             onClick={onInsert}
-            title="Open GitHub's inline comment box on this line and stage as a review comment"
+            title="Post this as a review comment on the exact line (published immediately)"
           >
             Insert on line {finding.line}
           </button>
@@ -400,9 +400,9 @@ function FindingCard({ finding }: { finding: FindingMeta }) {
             type="button"
             className="md-finding-btn"
             onClick={onInsert}
-            title="Re-insert this comment (e.g. if you deleted the previous draft)"
+            title="Post this comment again"
           >
-            Re-insert
+            Post again
           </button>
         )}
         <button

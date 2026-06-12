@@ -42,16 +42,6 @@ export default function App() {
   const [insertedFindings, setInsertedFindings] = useState<Set<string>>(
     () => new Set(),
   );
-  /**
-   * Findings staged for a batch draft review (the new /changes viewer
-   * can't be DOM-driven, and GitHub has no per-comment append API, so we
-   * collect them and create the pending review in one call). Keyed by
-   * findingId. Submitting/clearing empties this.
-   */
-  const [pendingDraft, setPendingDraft] = useState<
-    Map<string, { file: string; line: number; side: "LEFT" | "RIGHT"; body: string }>
-  >(() => new Map());
-  const [draftBusy, setDraftBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const prCtx = usePRContext();
 
@@ -68,28 +58,9 @@ export default function App() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type !== "gh-claude-insert-result") return;
-      const { ok, findingId: id, stageForDraft, comment } = e.data as {
-        ok: boolean;
-        findingId?: string;
-        stageForDraft?: boolean;
-        comment?: { file: string; line: number; side: "LEFT" | "RIGHT"; body: string };
-      };
+      const { ok, findingId: id } = e.data as { ok: boolean; findingId?: string };
       if (typeof id !== "string") return;
       if (ok) {
-        // DOM path staged a native draft — mark inserted.
-        setInsertedFindings((prev) => {
-          if (prev.has(id)) return prev;
-          const next = new Set(prev);
-          next.add(id);
-          return next;
-        });
-      } else if (stageForDraft && comment) {
-        // New-viewer path: collect into the local pending draft batch.
-        setPendingDraft((prev) => {
-          const next = new Map(prev);
-          next.set(id, comment);
-          return next;
-        });
         setInsertedFindings((prev) => {
           if (prev.has(id)) return prev;
           const next = new Set(prev);
@@ -111,43 +82,6 @@ export default function App() {
     setSettings((prev) => (prev ? { ...prev, anthropicModel: modelId } : prev));
     saveSettings({ anthropicModel: modelId });
   }, []);
-
-  // Batch-create a GitHub pending (draft) review from the staged comments.
-  // Used for the new /changes viewer where per-comment DOM insertion isn't
-  // possible. One API call creates the whole draft; the user submits it in
-  // GitHub afterwards.
-  const createDraftReview = useCallback(async () => {
-    if (!prCtx || pendingDraft.size === 0 || draftBusy) return;
-    setDraftBusy(true);
-    try {
-      const comments = [...pendingDraft.values()];
-      const resp = (await chrome.runtime.sendMessage({
-        type: "createDraftReview",
-        host: prCtx.host,
-        owner: prCtx.owner,
-        repo: prCtx.repo,
-        number: prCtx.number,
-        comments,
-      })) as { ok: boolean; error?: string } | undefined;
-      if (resp?.ok) {
-        window.parent.postMessage(
-          {
-            type: "gh-claude-toast",
-            text: `Created a draft review with ${comments.length} comment${comments.length === 1 ? "" : "s"} — submit it in GitHub`,
-          },
-          "*",
-        );
-        setPendingDraft(new Map());
-      } else {
-        window.parent.postMessage(
-          { type: "gh-claude-toast", text: resp?.error ?? "Could not create the draft review" },
-          "*",
-        );
-      }
-    } finally {
-      setDraftBusy(false);
-    }
-  }, [prCtx, pendingDraft, draftBusy]);
 
   const send = useCallback(
     async (text: string) => {
@@ -285,21 +219,6 @@ export default function App() {
           <EmptyState prCtx={prCtx} onPick={send} />
         ) : (
           <ChatStream messages={messages} />
-        )}
-        {pendingDraft.size > 0 && (
-          <div className="draft-bar">
-            <span className="draft-bar-count">
-              {pendingDraft.size} comment{pendingDraft.size === 1 ? "" : "s"} staged for a draft review
-            </span>
-            <button
-              className="btn draft-bar-btn"
-              onClick={createDraftReview}
-              disabled={draftBusy}
-              title="Create a GitHub draft review containing the staged comments. You submit it in GitHub."
-            >
-              {draftBusy ? "Creating…" : "Create draft review"}
-            </button>
-          </div>
         )}
         <Composer
           busy={busy}

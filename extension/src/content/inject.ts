@@ -18,12 +18,8 @@
  * which Turbo doesn't replace.
  */
 
-import { extractPRContextWithDiffFetch } from "../github/pr-context";
-import {
-  DOM_UNAVAILABLE,
-  insertFindingComment,
-  previewFindingLocation,
-} from "../github/review-insert";
+import { extractPRContextWithDiffFetch, parsePRUrl } from "../github/pr-context";
+import { previewFindingLocation } from "../github/review-insert";
 import { DEFAULT_PANEL_LAYOUT, PanelLayout } from "../transports/types";
 
 const PANEL_ID = "gh-claude-panel-root";
@@ -401,45 +397,45 @@ async function handleInsertFinding(req: {
   }
   const side = req.side ?? "RIGHT";
 
-  // 1. Try DOM insertion (classic Files-changed viewer). When it works
-  //    it stages a native draft comment immediately — the smoothest path.
-  const dom = await insertFindingComment({
-    file: req.file,
-    line: req.line,
-    side,
-    text: req.text,
-  });
-  if (dom.ok) {
-    showToast(`Staged as draft review comment on ${req.file}:${req.line}`);
+  const parsed = parsePRUrl();
+  if (!parsed) {
+    await copyToClipboardFallback(req.text, "not on a PR page — copied to clipboard");
+    postInsertResult(req.findingId, false, "not on a PR page");
+    return;
+  }
+
+  // Post the comment live, on the exact line, via the REST API. Works
+  // on every viewer (classic /files and the new React /changes) because
+  // it doesn't touch the page DOM. Published immediately.
+  let resp: { ok: boolean; error?: string; htmlUrl?: string } | undefined;
+  try {
+    resp = await chrome.runtime.sendMessage({
+      type: "postLiveComment",
+      host: parsed.host,
+      owner: parsed.owner,
+      repo: parsed.repo,
+      number: parsed.number,
+      path: req.file,
+      line: req.line,
+      side,
+      body: req.text,
+    });
+  } catch (err) {
+    resp = { ok: false, error: (err as Error).message };
+  }
+
+  if (resp?.ok) {
+    showToast(`Comment posted on ${req.file}:${req.line}`);
     postInsertResult(req.findingId, true);
+    // Best-effort: scroll the diff to the line so the user sees it land.
+    void previewFindingLocation({ file: req.file, line: req.line, side });
     return;
   }
 
-  // 2. DOM couldn't be driven (new /changes React viewer, etc.). The
-  //    GitHub API has no per-comment append for a pending review, so we
-  //    can't stage one comment at a time via the API. Instead, tell the
-  //    panel to add this finding to its local pending list; the user
-  //    creates the whole draft review in one batch from the panel.
-  if (dom.reason === DOM_UNAVAILABLE) {
-    // Echo the comment data back so the panel can hold it in its pending
-    // list and batch-create the draft review later.
-    const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
-    frame?.contentWindow?.postMessage(
-      {
-        type: "gh-claude-insert-result",
-        findingId: req.findingId,
-        ok: false,
-        stageForDraft: true,
-        comment: { file: req.file, line: req.line, side, body: req.text },
-      },
-      "*",
-    );
-    return;
-  }
-
-  // 3. A genuine failure (not just an unsupported viewer) — clipboard.
-  await copyToClipboardFallback(req.text, `${dom.reason} — copied to clipboard`);
-  postInsertResult(req.findingId, false, dom.reason);
+  // Failed — copy to clipboard with the reason so the user can post manually.
+  const reason = resp?.error ?? "couldn't post the comment";
+  await copyToClipboardFallback(req.text, `${reason} — copied to clipboard`);
+  postInsertResult(req.findingId, false, reason);
 }
 
 /** Tell the panel iframe whether the insertion succeeded so the finding
@@ -449,12 +445,11 @@ function postInsertResult(
   findingId: string | undefined,
   ok: boolean,
   reason?: string,
-  stageForDraft?: boolean,
 ): void {
   if (!findingId) return;
   const frame = document.getElementById(PANEL_ID) as HTMLIFrameElement | null;
   frame?.contentWindow?.postMessage(
-    { type: "gh-claude-insert-result", findingId, ok, reason, stageForDraft },
+    { type: "gh-claude-insert-result", findingId, ok, reason },
     "*",
   );
 }
