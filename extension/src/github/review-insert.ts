@@ -46,9 +46,11 @@ export type PreviewResult =
  * Read-only — does not click any buttons or open any forms.
  */
 export async function previewFindingLocation(req: PreviewRequest): Promise<PreviewResult> {
-  if (!FILES_PATH_RE.test(location.pathname)) {
-    const navigated = await navigateToFilesTab();
-    if (!navigated) return { ok: false, reason: "could not open Files Changed tab" };
+  if (!DIFF_VIEW_RE.test(location.pathname)) {
+    const navigated = await navigateToDiffView();
+    if (!navigated) {
+      return { ok: false, reason: "open the Files changed tab, then try again" };
+    }
   }
 
   const fileContainer = await waitFor(() => findFileContainer(req.file), 4000);
@@ -60,12 +62,12 @@ export async function previewFindingLocation(req: PreviewRequest): Promise<Previ
   if (!numCell) {
     return {
       ok: false,
-      reason: `line ${req.line} (${req.side}) not in the diff for ${req.file}`,
+      reason: notFoundReason(`line ${req.line} not found for ${req.file}`),
     };
   }
 
   const row = numCell.closest("tr");
-  if (!row) return { ok: false, reason: "row not found" };
+  if (!row) return { ok: false, reason: notFoundReason("diff row not found") };
 
   // Scroll the row into view, biased toward the top third so the user
   // has some visual context above it.
@@ -103,19 +105,23 @@ function flashHighlight(row: HTMLElement) {
   setTimeout(() => row.classList.remove("gh-claude-flash"), 2400);
 }
 
-const FILES_PATH_RE = /\/pull\/\d+\/files(\/.*)?$/;
+// Both the classic "/files" tab and the newer "/changes" React viewer
+// render the per-file diff. Either one is a valid place to insert/preview.
+const DIFF_VIEW_RE = /\/pull\/\d+\/(files|changes)(\/.*)?$/;
 
 export async function insertFindingComment(req: InsertRequest): Promise<InsertResult> {
-  // 1. Make sure we're on the Files Changed tab.
-  if (!FILES_PATH_RE.test(location.pathname)) {
-    const navigated = await navigateToFilesTab();
-    if (!navigated) return { ok: false, reason: "could not open Files Changed tab" };
+  // 1. Make sure we're on a diff view (Files changed or Changes).
+  if (!DIFF_VIEW_RE.test(location.pathname)) {
+    const navigated = await navigateToDiffView();
+    if (!navigated) {
+      return { ok: false, reason: "open the Files changed tab, then try again" };
+    }
   }
 
   // 2. Locate the file's diff container.
   const fileContainer = await waitFor(() => findFileContainer(req.file), 4000);
   if (!fileContainer) {
-    return { ok: false, reason: `file ${req.file} not in this PR's diff` };
+    return { ok: false, reason: notFoundReason(`file ${req.file} not found in the diff`) };
   }
 
   // 3. Find the target line's <td class="blob-num">.
@@ -123,7 +129,7 @@ export async function insertFindingComment(req: InsertRequest): Promise<InsertRe
   if (!numCell) {
     return {
       ok: false,
-      reason: `line ${req.line} (${req.side}) not in the diff for ${req.file}`,
+      reason: notFoundReason(`line ${req.line} not found for ${req.file}`),
     };
   }
 
@@ -162,23 +168,46 @@ export async function insertFindingComment(req: InsertRequest): Promise<InsertRe
   return { ok: true };
 }
 
-/** Same-origin navigation that triggers GitHub's Turbo router. */
-async function navigateToFilesTab(): Promise<boolean> {
-  // The "Files changed" tab is a regular <a>; clicking it is friendlier
-  // to Turbo than location.assign.
+/**
+ * Switch to the diff view (Files changed / Changes) via in-page SPA
+ * navigation only. Clicks the tab anchor and lets GitHub's Turbo/React
+ * router swap the content without a page load.
+ *
+ * IMPORTANT: this NEVER does a hard navigation (location.assign). A full
+ * page reload destroys the panel iframe and the user's entire chat
+ * session — losing a review they may have spent real time on. If we
+ * can't find a clickable tab to do an in-page switch, we return false
+ * and the caller falls back to copying the comment to the clipboard.
+ * A lost review is never an acceptable cost for "insert on line."
+ */
+async function navigateToDiffView(): Promise<boolean> {
   const tab = document.querySelector<HTMLAnchorElement>(
-    'a[data-tab-item="files_bucket"], a#files_tab, a.tabnav-tab[href$="/files"]',
+    [
+      'a[data-tab-item="files_bucket"]',
+      "a#files_tab",
+      'a.tabnav-tab[href$="/files"]',
+      'a[href$="/changes"]',
+      'a[href*="/files"]',
+      'a[href*="/changes"]',
+    ].join(", "),
   );
-  if (tab) {
-    tab.click();
-    // Wait for the URL to update.
-    return waitFor(() => FILES_PATH_RE.test(location.pathname), 4000) as Promise<boolean>;
+  if (!tab) return false;
+  tab.click();
+  const ok = await waitFor(() => DIFF_VIEW_RE.test(location.pathname), 4000);
+  return ok === true;
+}
+
+/**
+ * Build a not-found reason, appending an actionable hint when we're on
+ * the new React "/changes" viewer — its DOM doesn't expose the classic
+ * blob-num/blob-code cells our row-finder needs, so switching to the
+ * classic "Files changed" tab usually makes Insert / Show-in-diff work.
+ */
+function notFoundReason(base: string): string {
+  if (/\/changes(\/.*)?$/.test(location.pathname)) {
+    return `${base} — try the classic "Files changed" tab (the new diff view isn't supported yet)`;
   }
-  // Fallback: hard navigate.
-  const m = location.pathname.match(/^(\/[^/]+\/[^/]+\/pull\/\d+)/);
-  if (!m) return false;
-  location.assign(m[1] + "/files");
-  return false; // hard nav blows away this script; the user will need to retry.
+  return base;
 }
 
 function findFileContainer(path: string): HTMLElement | null {
